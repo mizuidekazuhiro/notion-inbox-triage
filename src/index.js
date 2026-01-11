@@ -24,11 +24,14 @@ export default {
       const inbox = await fetchInbox(env);
       const body = buildInboxMail(inbox, env.BASE_URL);
     
-      await sendMail({
-        to: env.MAIL_TO,
-        subject: `[TEST] Inbox｜ ${inbox.length} 件`,
-        content: body
-      });
+      await sendMail(
+        {
+          to: env.MAIL_TO,
+          subject: `[TEST]Inbox｜ ${inbox.length} 件`,
+          content: body
+        },
+        env   // ← これが必要
+      );
     
       return Response.json({
         ok: true,
@@ -182,13 +185,15 @@ export default {
     const inbox = await fetchInbox(env);
     const body = buildInboxMail(inbox, env.BASE_URL);
 
-    await sendMail({
-      to: env.MAIL_TO,
-      subject: `Inbox｜ ${inbox.length} 件`,
-      content: body
-    });
-  }
-};
+    await sendMail(
+      {
+        to: env.MAIL_TO,
+        subject: `Inbox｜ ${inbox.length} 件`,
+        content: body
+      },
+      env   // ← これが必要
+    );
+
 
 // =====================
 // Undo handler

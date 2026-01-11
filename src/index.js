@@ -155,9 +155,7 @@ export default {
     return new Response("Not Found", { status: 404 });
   },
 
-  async fetch(request, env) {
-    return new Response("OK");
-  },
+
   // =====================
   // Cron（毎朝）
   // =====================

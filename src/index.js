@@ -20,35 +20,23 @@ export default {
     // =====================
     // Mail 手動テスト
     // =====================
-    if (url.pathname === "/test/mail") {
-      try {
-        const inbox = await fetchInbox(env);
-        const body = buildInboxMail(inbox, env.BASE_URL);
-    
-        await sendMail(
-          {
-            to: env.MAIL_TO,
-            subject: `[TEST] Inbox｜ ${inbox.length} 件`,
-            content: body
-          },
-          env
-        );
-    
-        return Response.json({
-          ok: true,
-          inbox_count: inbox.length
-        });
-      } catch (err) {
-        return Response.json(
-          {
-            ok: false,
-            error: err.message,
-            stack: err.stack
-          },
-          { status: 500 }
-        );
-      }
-    }
+// =====================
+// テスト用：mailto生成
+// =====================
+if (url.pathname === "/test/mail") {
+  const inbox = await fetchInbox(env);
+  const body = buildInboxMail(inbox, env.BASE_URL);
+
+  const subject = `Inbox｜${inbox.length} 件`;
+
+  const mailto = `mailto:${env.MAIL_TO}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+  return new Response(null, {
+    status: 302,
+    headers: { Location: mailto }
+  });
+}
+
 
 
 

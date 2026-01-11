@@ -1,10 +1,10 @@
 export async function sendMail({ to, subject, content }, env) {
   const res = await fetch(
-    `https://api.mailchannels.net/tx/v1/send`,
+    "https://api.mailchannels.net/tx/v1/send",
     {
       method: "POST",
       headers: {
-        "content-type": "application/json"
+        "content-type": "application/json; charset=UTF-8"
       },
       body: JSON.stringify({
         personalizations: [
@@ -17,6 +17,8 @@ export async function sendMail({ to, subject, content }, env) {
           name: "Notion Inbox Bot"
         },
         subject: subject,
+
+        // ★ここが最重要
         content: [
           {
             type: "text/html",

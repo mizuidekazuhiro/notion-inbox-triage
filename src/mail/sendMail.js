@@ -16,10 +16,10 @@ export async function sendMail({ to, subject, content }, env) {
           email: env.MAIL_FROM,
           name: "Notion Inbox Bot"
         },
-        subject: subject,
+        subject,
         content: [
           {
-            type: "text/html; charset=UTF-8",
+            type: "text/html",   // ★ charset を付けない
             value: content
           }
         ]

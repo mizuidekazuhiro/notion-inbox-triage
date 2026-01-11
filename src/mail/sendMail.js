@@ -19,7 +19,7 @@ export async function sendMail({ to, subject, content }, env) {
         subject: subject,
         content: [
           {
-            type: "text/plain",
+            type: "text/html",
             value: content
           }
         ]

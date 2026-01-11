@@ -1,24 +1,34 @@
-export async function sendMail({ to, subject, content }) {
-  const res = await fetch("https://api.mailchannels.net/tx/v1/send", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      personalizations: [{ to: [{ email: to }] }],
-      from: {
-        email: "no-reply@your-worker.workers.dev",
-        name: "Inbox Judge Bot"
+export async function sendMail({ to, subject, content }, env) {
+  const res = await fetch(
+    `https://api.mailchannels.net/tx/v1/send`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
       },
-      subject,
-      content: [
-        {
-          type: "text/plain",
-          value: content
-        }
-      ]
-    })
-  });
+      body: JSON.stringify({
+        personalizations: [
+          {
+            to: [{ email: to }]
+          }
+        ],
+        from: {
+          email: env.MAIL_FROM,
+          name: "Notion Inbox Bot"
+        },
+        subject: subject,
+        content: [
+          {
+            type: "text/plain",
+            value: content
+          }
+        ]
+      })
+    }
+  );
 
   if (!res.ok) {
-    throw new Error("Mail send failed");
+    const text = await res.text();
+    throw new Error(`Mail send failed: ${text}`);
   }
 }

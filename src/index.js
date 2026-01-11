@@ -1,3 +1,5 @@
+import { inboxList } from "./routes/inbox";
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -14,7 +16,7 @@ export default {
     }
 
 
-  import { inboxList } from "./routes/inbox";
+
   export default {
     async fetch(request, env) {
       const url = new URL(request.url);

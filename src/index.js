@@ -17,6 +17,25 @@ export default {
         token_length: env.NOTION_TOKEN?.length
       });
     }
+    // =====================
+    // 🔧 Mail 手動テスト
+    // =====================
+    if (url.pathname === "/test/mail") {
+      const inbox = await fetchInbox(env);
+      const body = buildInboxMail(inbox, env.BASE_URL);
+    
+      await sendMail({
+        to: env.MAIL_TO,
+        subject: `[TEST] Inbox｜ ${inbox.length} 件`,
+        content: body
+      });
+    
+      return Response.json({
+        ok: true,
+        inbox_count: inbox.length,
+        mail_to: env.MAIL_TO
+      });
+    }
 
     // =====================
     // ③ Inbox → Tasks

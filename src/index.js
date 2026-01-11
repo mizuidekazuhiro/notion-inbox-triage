@@ -1,4 +1,7 @@
 import { inboxList } from "./routes/inbox"; // ← 今回は未使用なのでコメントアウト
+import { fetchInbox } from "./notion/inbox";
+import { buildInboxMail } from "./mail/buildInboxMail";
+import { sendMail } from "./mail/sendMail";
 
 export default {
   async fetch(request, env, ctx) {
@@ -155,8 +158,20 @@ export default {
   // =====================
   // Cron（毎朝）
   // =====================
+export default {
+  async fetch(request, env) {
+    return new Response("OK");
+  },
+
   async scheduled(event, env, ctx) {
-    console.log("Daily cron job executed");
+    const inbox = await fetchInbox(env);
+    const body = buildInboxMail(inbox, env.BASE_URL);
+
+    await sendMail({
+      to: env.MAIL_TO,
+      subject: `Inbox｜ ${inbox.length} 件`,
+      content: body
+    });
   }
 };
 

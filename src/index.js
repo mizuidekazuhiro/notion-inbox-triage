@@ -262,11 +262,13 @@ async function handleUndo(url, env) {
             rich_text: []
           },
           "Processed At": {
-            date: {}
-        },
-      }),
+            date: null
+          }
+        }
+      })
     }
   );
+
 
   /* =====================
      Task を archive

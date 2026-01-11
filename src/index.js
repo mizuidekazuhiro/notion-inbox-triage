@@ -18,27 +18,27 @@ export default {
       });
     }
     // =====================
-    // 🔧 Mail 手動テスト
+    // Mail 手動テスト
     // =====================
     if (url.pathname === "/test/mail") {
       const inbox = await fetchInbox(env);
-      const body = buildInboxMail(inbox, env.BASE_URL);
+      const body = buildInboxMail(inbox, url.origin);
     
       await sendMail(
         {
           to: env.MAIL_TO,
-          subject: `[TEST]Inbox｜ ${inbox.length} 件`,
+          subject: "[TEST] Inbox Mail",
           content: body
         },
-        env   // ← これが必要
+        env
       );
     
       return Response.json({
         ok: true,
-        inbox_count: inbox.length,
-        mail_to: env.MAIL_TO
+        inbox_count: inbox.length
       });
     }
+
 
     // =====================
     // ③ Inbox → Tasks

@@ -4,7 +4,7 @@ export async function sendMail({ to, subject, content }, env) {
     {
       method: "POST",
       headers: {
-        "content-type": "application/json; charset=UTF-8"
+        "content-type": "application/json"
       },
       body: JSON.stringify({
         personalizations: [
@@ -17,11 +17,9 @@ export async function sendMail({ to, subject, content }, env) {
           name: "Notion Inbox Bot"
         },
         subject: subject,
-
-        // ★ここが最重要
         content: [
           {
-            type: "text/html",
+            type: "text/html; charset=UTF-8",
             value: content
           }
         ]

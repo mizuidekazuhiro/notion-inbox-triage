@@ -13,49 +13,33 @@ export default {
       });
     }
 
-    // =====================
-    // ② Inbox 全件一覧
-    // =====================
-    if (url.pathname === "/inbox/list") {
-      const baseUrl = url.origin;
-      const res = await fetch(
-        `https://api.notion.com/v1/databases/${env.INBOX_DB_ID}/query`,
-        {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${env.NOTION_TOKEN}`,
-            "Notion-Version": "2022-06-28",
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            page_size: 20,
-            sorts: [{ property: "Created", direction: "ascending" }]
-          })
-        }
-      );
 
-      const data = await res.json();
-
-      const items = (data.results ?? []).map(page => ({
-        id: page.id,
-        title: page.properties.Name?.title?.[0]?.text?.content ?? "(No title)",
-        created: page.properties.Created?.date?.start ?? null,
-        actions: {
-          do: `${baseUrl}/action/move?id=${page.id}&status=Do`,
-          waiting: `${baseUrl}/action/move?id=${page.id}&status=Waiting`,
-          someday: `${baseUrl}/action/move?id=${page.id}&status=Someday`,
-          done: `${baseUrl}/action/move?id=${page.id}&status=Done`,
-          drop: `${baseUrl}/action/move?id=${page.id}&status=Drop`
-        }        
-      }));
-
-      return Response.json({
-        generated_at: new Date().toISOString(),
-        count: items.length,
-        items
-      });
+  import { inboxList } from "./routes/inbox";
+  export default {
+    async fetch(request, env) {
+      const url = new URL(request.url);
+  
+      // ① トークン確認（これはそのまま）
+      if (url.pathname === "/test/token") {
+        return Response.json({
+          token_exists: !!env.NOTION_TOKEN,
+          token_head: env.NOTION_TOKEN?.slice(0, 10),
+          token_length: env.NOTION_TOKEN?.length
+        });
+      }
+  
+      // ② Inbox 全件一覧（外出し）
+      if (url.pathname === "/inbox/list") {
+        return inboxList(request, env);
+      }
+  
+      // ③ 以降は今日は触らない
+      return new Response("Not Found", { status: 404 });
     }
+  };
 
+
+    
     // =====================
     // ③ Inbox → Tasks
     // =====================

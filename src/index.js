@@ -1,6 +1,6 @@
 export default {
   async fetch(request, env) {
-    const url = new URL(request.url)
+    const url = new URL(request.url);
 
     // =====================
     // ① トークン確認
@@ -10,13 +10,14 @@ export default {
         token_exists: !!env.NOTION_TOKEN,
         token_head: env.NOTION_TOKEN?.slice(0, 10),
         token_length: env.NOTION_TOKEN?.length
-      })
+      });
     }
 
     // =====================
-    // ② Inbox DB 取得テスト
+    // ② Inbox 全件一覧
     // =====================
-    if (url.pathname === "/test/inbox") {
+    if (url.pathname === "/inbox/list") {
+      const baseUrl = url.origin;
       const res = await fetch(
         `https://api.notion.com/v1/databases/${env.INBOX_DB_ID}/query`,
         {
@@ -26,68 +27,96 @@ export default {
             "Notion-Version": "2022-06-28",
             "Content-Type": "application/json"
           },
-          body: JSON.stringify({ page_size: 1 })
+          body: JSON.stringify({
+            page_size: 20,
+            sorts: [{ property: "Created", direction: "ascending" }]
+          })
         }
-      )
+      );
 
-      const data = await res.json()
+      const data = await res.json();
+
+      const items = (data.results ?? []).map(page => ({
+        id: page.id,
+        title: page.properties.Name?.title?.[0]?.text?.content ?? "(No title)",
+        created: page.properties.Created?.date?.start ?? null,
+        actions: {
+          do: `${baseUrl}/action/move?id=${page.id}&status=Do`,
+          waiting: `${baseUrl}/action/move?id=${page.id}&status=Waiting`,
+          someday: `${baseUrl}/action/move?id=${page.id}&status=Someday`,
+          done: `${baseUrl}/action/move?id=${page.id}&status=Done`,
+          drop: `${baseUrl}/action/move?id=${page.id}&status=Drop`
+        }        
+      }));
 
       return Response.json({
-        ok: res.ok,
-        status: res.status,
-        results_count: data.results?.length ?? 0,
-        sample: data.results?.[0] ?? null
-      })
+        generated_at: new Date().toISOString(),
+        count: items.length,
+        items
+      });
     }
 
     // =====================
-    // ③ Tasks DB スキーマ確認
+    // ③ Inbox → Tasks
     // =====================
-    if (url.pathname === "/test/tasks-schema") {
-      const res = await fetch(
-        `https://api.notion.com/v1/databases/${env.TASKS_DB_ID}`,
+    if (url.pathname === "/action/move") {
+      const pageId = url.searchParams.get("id");
+      const status = url.searchParams.get("status");
+
+
+    // =====================
+    // Status 制御（追加）
+    // =====================
+      const allowedStatus = [
+        "Inbox",
+        "Do",
+        "Someday",
+        "Waiting",
+        "Done",
+        "Drop"
+      ];
+
+      if (!allowedStatus.includes(status)) {
+        return Response.json(
+          {
+            error: "invalid status",
+            allowedStatus
+          },
+          { status: 400 }
+        );
+      }
+
+
+      if (!pageId || !status) {
+        return Response.json(
+          { error: "id and status are required" },
+          { status: 400 }
+        );
+      }
+
+      const pageRes = await fetch(
+        `https://api.notion.com/v1/pages/${pageId}`,
         {
           headers: {
             "Authorization": `Bearer ${env.NOTION_TOKEN}`,
             "Notion-Version": "2022-06-28"
           }
         }
-      )
+      );
 
-      const data = await res.json()
-      return Response.json(data.properties)
-    }
-
-    // =====================
-    // ④ Inbox → Tasks に1件移動
-    // =====================
-    if (url.pathname === "/test/move-one") {
-      // Inbox から1件取得
-      const inboxRes = await fetch(
-        `https://api.notion.com/v1/databases/${env.INBOX_DB_ID}/query`,
-        {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${env.NOTION_TOKEN}`,
-            "Notion-Version": "2022-06-28",
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ page_size: 1 })
-        }
-      )
-
-      const inboxData = await inboxRes.json()
-      const page = inboxData.results?.[0]
-
-      if (!page) {
-        return Response.json({ error: "Inbox is empty" }, { status: 400 })
+      const page = await pageRes.json();
+      if (!pageRes.ok) {
+        return Response.json(
+          { error: "Failed to fetch inbox page", detail: page },
+          { status: 500 }
+        );
       }
 
-      // Inbox 側の title（Name）
       const title =
-        page.properties.Name?.title?.[0]?.text?.content ?? "Untitled"
+        page.properties.Name?.title?.[0]?.text?.content ?? "Untitled";
+      const now = new Date().toISOString();
 
-      // Tasks DB に作成
+      // Tasks 作成
       const createRes = await fetch(
         "https://api.notion.com/v1/pages",
         {
@@ -100,27 +129,167 @@ export default {
           body: JSON.stringify({
             parent: { database_id: env.TASKS_DB_ID },
             properties: {
-              // ★ Tasks DB の title 名は「名前」
-              "名前": {
-                title: [{ text: { content: title } }]
+              "名前": { title: [{ text: { content: title } }] },
+              Status: { select: { name: status } },
+              "Triage Source": {
+                select: { name: "Manual (URL click)" }
               },
-              Status: {
-                select: { name: "Inbox" }
+              "Triage At": { date: { start: now } },
+              // ★ Undo 用
+              "Inbox Page ID": {
+                rich_text: [{ text: { content: pageId } }]
               }
             }
           })
         }
-      )
+      );
 
-      const created = await createRes.json()
+
+      const created = await createRes.json();
+      if (!createRes.ok) {
+        return Response.json(
+          { error: "Failed to create task", detail: created },
+          { status: 500 }
+        );
+      }
+
+      const taskId = created.id;
+
+      // Undo URL を Task に書き込む
+      await fetch(
+        `https://api.notion.com/v1/pages/${taskId}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Authorization": `Bearer ${env.NOTION_TOKEN}`,
+            "Notion-Version": "2022-06-28",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            properties: {
+              "Undo URL": {
+                url: `${url.origin}/action/undo?task_id=${taskId}`
+              }
+            }
+          })
+        }
+      );
+
+      // Inbox 更新（archiveしない）
+      await fetch(
+        `https://api.notion.com/v1/pages/${pageId}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Authorization": `Bearer ${env.NOTION_TOKEN}`,
+            "Notion-Version": "2022-06-28",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            properties: {
+              Processed: {
+                rich_text: [{ text: { content: `Moved to ${status}` } }]
+              },
+              "Processed At": { date: { start: now } }
+            }
+          })
+        }
+      );
 
       return Response.json({
-        created_ok: createRes.ok,
-        task_id: created.id ?? null,
-        error: createRes.ok ? null : created
-      })
+        ok: true,
+        moved_to: status,
+        task_id: created.id
+      });
     }
 
-    return new Response("Not Found", { status: 404 })
+    if (url.pathname === "/action/undo") {
+      return handleUndo(url, env);
+    }
+    
+    
+    return new Response("Not Found", { status: 404 });
+  },
+
+
+  //毎朝実行Cron
+    async scheduled(event, env, ctx) {
+    console.log("Daily cron job executed");
   }
+};
+
+async function handleUndo(url, env) {
+  const taskId = url.searchParams.get("task_id");
+
+  if (!taskId) {
+    return new Response("task_id required", { status: 400 });
+  }
+
+  /* =====================
+     Task を取得
+  ===================== */
+  const taskRes = await fetch(
+    `https://api.notion.com/v1/pages/${taskId}`,
+    {
+      headers: notionHeaders(env),
+    }
+  );
+
+  if (!taskRes.ok) {
+    return new Response("Task not found", { status: 404 });
+  }
+
+  const task = await taskRes.json();
+
+  const inboxPageId =
+    task.properties["Inbox Page ID"]?.rich_text?.[0]?.plain_text;
+
+  if (!inboxPageId) {
+    return new Response("Inbox Page ID not found", { status: 400 });
+  }
+
+  /* =====================
+     Inbox を未処理に戻す
+  ===================== */
+  await fetch(
+    `https://api.notion.com/v1/pages/${inboxPageId}`,
+    {
+      method: "PATCH",
+      headers: notionHeaders(env),
+      body: JSON.stringify({
+        properties: {
+          Processed: {
+            rich_text: []
+          },
+          "Processed At": {
+            date: {}
+        },
+      }),
+    }
+  );
+
+  /* =====================
+     Task を archive
+  ===================== */
+  await fetch(
+    `https://api.notion.com/v1/pages/${taskId}`,
+    {
+      method: "PATCH",
+      headers: notionHeaders(env),
+      body: JSON.stringify({
+        archived: true,
+      }),
+    }
+  );
+
+  return new Response("Undo completed");
 }
+function notionHeaders(env) {
+  return {
+    "Authorization": `Bearer ${env.NOTION_TOKEN}`,
+    "Notion-Version": "2022-06-28",
+    "Content-Type": "application/json",
+  };
+}
+
+

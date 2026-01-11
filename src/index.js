@@ -1,4 +1,4 @@
-import { inboxList } from "./routes/inbox"; // ← 今回は未使用なのでコメントアウト
+import { inboxList } from "./routes/inbox"; // ← 今回は未使用なのでコメントアウト??
 import { fetchInbox } from "./notion/inbox";
 import { buildInboxMail } from "./mail/buildInboxMail";
 import { sendMail } from "./mail/sendMail";
@@ -193,6 +193,9 @@ export default {
       },
       env   // ← これが必要
     );
+  } // ← scheduled の閉じ括弧
+
+}; // ← export default オブジェクトの閉じ括弧とセミコロン
 
 
 // =====================

@@ -1,7 +1,7 @@
-import { inboxList } from "./routes/inbox";
+import { inboxList } from "./routes/inbox"; // ← 今回は未使用なのでコメントアウト
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     // =====================
@@ -15,7 +15,6 @@ export default {
       });
     }
 
-    
     // =====================
     // ③ Inbox → Tasks
     // =====================
@@ -23,10 +22,6 @@ export default {
       const pageId = url.searchParams.get("id");
       const status = url.searchParams.get("status");
 
-
-    // =====================
-    // Status 制御（追加）
-    // =====================
       const allowedStatus = [
         "Inbox",
         "Do",
@@ -36,20 +31,16 @@ export default {
         "Drop"
       ];
 
-      if (!allowedStatus.includes(status)) {
+      if (!pageId || !status) {
         return Response.json(
-          {
-            error: "invalid status",
-            allowedStatus
-          },
+          { error: "id and status are required" },
           { status: 400 }
         );
       }
 
-
-      if (!pageId || !status) {
+      if (!allowedStatus.includes(status)) {
         return Response.json(
-          { error: "id and status are required" },
+          { error: "invalid status", allowedStatus },
           { status: 400 }
         );
       }
@@ -58,7 +49,7 @@ export default {
         `https://api.notion.com/v1/pages/${pageId}`,
         {
           headers: {
-            "Authorization": `Bearer ${env.NOTION_TOKEN}`,
+            Authorization: `Bearer ${env.NOTION_TOKEN}`,
             "Notion-Version": "2022-06-28"
           }
         }
@@ -82,20 +73,17 @@ export default {
         {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${env.NOTION_TOKEN}`,
+            Authorization: `Bearer ${env.NOTION_TOKEN}`,
             "Notion-Version": "2022-06-28",
             "Content-Type": "application/json"
           },
           body: JSON.stringify({
             parent: { database_id: env.TASKS_DB_ID },
             properties: {
-              "名前": { title: [{ text: { content: title } }] },
+              名前: { title: [{ text: { content: title } }] },
               Status: { select: { name: status } },
-              "Triage Source": {
-                select: { name: "Manual (URL click)" }
-              },
+              "Triage Source": { select: { name: "Manual (URL click)" } },
               "Triage At": { date: { start: now } },
-              // ★ Undo 用
               "Inbox Page ID": {
                 rich_text: [{ text: { content: pageId } }]
               }
@@ -103,7 +91,6 @@ export default {
           })
         }
       );
-
 
       const created = await createRes.json();
       if (!createRes.ok) {
@@ -115,16 +102,12 @@ export default {
 
       const taskId = created.id;
 
-      // Undo URL を Task に書き込む
+      // Undo URL
       await fetch(
         `https://api.notion.com/v1/pages/${taskId}`,
         {
           method: "PATCH",
-          headers: {
-            "Authorization": `Bearer ${env.NOTION_TOKEN}`,
-            "Notion-Version": "2022-06-28",
-            "Content-Type": "application/json"
-          },
+          headers: notionHeaders(env),
           body: JSON.stringify({
             properties: {
               "Undo URL": {
@@ -135,16 +118,12 @@ export default {
         }
       );
 
-      // Inbox 更新（archiveしない）
+      // Inbox 更新
       await fetch(
         `https://api.notion.com/v1/pages/${pageId}`,
         {
           method: "PATCH",
-          headers: {
-            "Authorization": `Bearer ${env.NOTION_TOKEN}`,
-            "Notion-Version": "2022-06-28",
-            "Content-Type": "application/json"
-          },
+          headers: notionHeaders(env),
           body: JSON.stringify({
             properties: {
               Processed: {
@@ -159,40 +138,40 @@ export default {
       return Response.json({
         ok: true,
         moved_to: status,
-        task_id: created.id
+        task_id: taskId
       });
     }
 
+    // =====================
+    // Undo
+    // =====================
     if (url.pathname === "/action/undo") {
       return handleUndo(url, env);
     }
-    
-    
+
     return new Response("Not Found", { status: 404 });
   },
 
-
-  //毎朝実行Cron
-    async scheduled(event, env, ctx) {
+  // =====================
+  // Cron（毎朝）
+  // =====================
+  async scheduled(event, env, ctx) {
     console.log("Daily cron job executed");
   }
 };
 
+// =====================
+// Undo handler
+// =====================
 async function handleUndo(url, env) {
   const taskId = url.searchParams.get("task_id");
-
   if (!taskId) {
     return new Response("task_id required", { status: 400 });
   }
 
-  /* =====================
-     Task を取得
-  ===================== */
   const taskRes = await fetch(
     `https://api.notion.com/v1/pages/${taskId}`,
-    {
-      headers: notionHeaders(env),
-    }
+    { headers: notionHeaders(env) }
   );
 
   if (!taskRes.ok) {
@@ -200,7 +179,6 @@ async function handleUndo(url, env) {
   }
 
   const task = await taskRes.json();
-
   const inboxPageId =
     task.properties["Inbox Page ID"]?.rich_text?.[0]?.plain_text;
 
@@ -208,9 +186,6 @@ async function handleUndo(url, env) {
     return new Response("Inbox Page ID not found", { status: 400 });
   }
 
-  /* =====================
-     Inbox を未処理に戻す
-  ===================== */
   await fetch(
     `https://api.notion.com/v1/pages/${inboxPageId}`,
     {
@@ -218,41 +193,29 @@ async function handleUndo(url, env) {
       headers: notionHeaders(env),
       body: JSON.stringify({
         properties: {
-          Processed: {
-            rich_text: []
-          },
-          "Processed At": {
-            date: null
-          }
+          Processed: { rich_text: [] },
+          "Processed At": { date: null }
         }
       })
     }
   );
 
-
-  /* =====================
-     Task を archive
-  ===================== */
   await fetch(
     `https://api.notion.com/v1/pages/${taskId}`,
     {
       method: "PATCH",
       headers: notionHeaders(env),
-      body: JSON.stringify({
-        archived: true,
-      }),
+      body: JSON.stringify({ archived: true })
     }
   );
 
   return new Response("Undo completed");
 }
+
 function notionHeaders(env) {
   return {
-    "Authorization": `Bearer ${env.NOTION_TOKEN}`,
+    Authorization: `Bearer ${env.NOTION_TOKEN}`,
     "Notion-Version": "2022-06-28",
-    "Content-Type": "application/json",
+    "Content-Type": "application/json"
   };
 }
-
-    return new Response("Not Found", { status: 404 });
-

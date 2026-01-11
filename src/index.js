@@ -155,14 +155,12 @@ export default {
     return new Response("Not Found", { status: 404 });
   },
 
-  // =====================
-  // Cron（毎朝）
-  // =====================
-export default {
   async fetch(request, env) {
     return new Response("OK");
   },
-
+  // =====================
+  // Cron（毎朝）
+  // =====================
   async scheduled(event, env, ctx) {
     const inbox = await fetchInbox(env);
     const body = buildInboxMail(inbox, env.BASE_URL);

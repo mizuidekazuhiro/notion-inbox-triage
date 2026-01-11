@@ -15,32 +15,6 @@ export default {
       });
     }
 
-
-
-  export default {
-    async fetch(request, env) {
-      const url = new URL(request.url);
-  
-      // ① トークン確認（これはそのまま）
-      if (url.pathname === "/test/token") {
-        return Response.json({
-          token_exists: !!env.NOTION_TOKEN,
-          token_head: env.NOTION_TOKEN?.slice(0, 10),
-          token_length: env.NOTION_TOKEN?.length
-        });
-      }
-  
-      // ② Inbox 全件一覧（外出し）
-      if (url.pathname === "/inbox/list") {
-        return inboxList(request, env);
-      }
-  
-      // ③ 以降は今日は触らない
-      return new Response("Not Found", { status: 404 });
-    }
-  };
-
-
     
     // =====================
     // ③ Inbox → Tasks
@@ -280,4 +254,5 @@ function notionHeaders(env) {
   };
 }
 
+    return new Response("Not Found", { status: 404 });
 

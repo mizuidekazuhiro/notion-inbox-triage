@@ -68,6 +68,12 @@ if (url.pathname === "/mail/content") {
     // ③ Inbox → Tasks
     // =====================
     if (url.pathname === "/action/move") {
+      
+      // method を GET 以外拒否（Gmail の prefetch 対策）
+      if (request.method !== "GET") {
+        return new Response("Method Not Allowed", { status: 405 });
+      }
+      
       const pageId = url.searchParams.get("id");
       const status = url.searchParams.get("status");
 

@@ -33,9 +33,16 @@ export async function inboxList(request, env) {
     }
   }));
 
-  return Response.json({
-    generated_at: new Date().toISOString(),
-    count: items.length,
-    items
-  });
+ return new Response(
+   JSON.stringify({
+     generated_at: new Date().toISOString(),
+     count: items.length,
+     items
+   }),
+   {
+     headers: {
+       "Content-Type": "application/json; charset=UTF-8"
+     }
+   }
+ );
 }

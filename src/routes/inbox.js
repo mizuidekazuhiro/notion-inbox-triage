@@ -23,10 +23,6 @@ export async function inboxList(request, env) {
             {
               property: "Processed",
               rich_text: { is_empty: true }
-            },
-            {
-              property: "Status",
-              select: { equals: "Inbox" }
             }
           ]
         }

@@ -112,6 +112,21 @@ if (url.pathname === "/mail/content") {
         );
       }
 
+      // すでに処理済みなら何もしない
+      if (page.properties["Processed At"]?.date?.start) {
+        return new Response(
+          `
+          <html>
+            <body>
+              <script>window.close();</script>
+              <p>すでに処理済みです</p>
+            </body>
+          </html>
+          `,
+          { headers: { "Content-Type": "text/html" } }
+        );
+      }
+
       const title =
         page.properties.Name?.title?.[0]?.text?.content ?? "Untitled";
       const now = new Date().toISOString();

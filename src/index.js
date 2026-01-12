@@ -1,4 +1,4 @@
-import { inboxList } from "./routes/inbox"; // ← 今回は未使用なのでコメントアウト??
+import { inboxList } from "./routes/inbox"; 
 import { fetchInbox } from "./notion/inbox";
 import { buildInboxMail } from "./mail/buildInboxMail";
 //import { sendMail } from "./mail/sendMail";

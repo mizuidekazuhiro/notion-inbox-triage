@@ -1,4 +1,4 @@
-import { inboxList } from "./routes/inbox"; // ← 今回は未使用なのでコメントアウト??
+//import { inboxList } from "./routes/inbox"; // ← 今回は未使用なのでコメントアウト??
 import { fetchInbox } from "./notion/inbox";
 import { buildInboxMail } from "./mail/buildInboxMail";
 //import { sendMail } from "./mail/sendMail";
@@ -23,21 +23,27 @@ export default {
 if (url.pathname === "/api/inbox") {
   const inbox = await fetchInbox(env);
 
-  return Response.json({
-    count: inbox.length,
-    items: inbox.map(p => ({
-      id: p.id,
-      title:
-        p.properties.Name?.title?.[0]?.text?.content ?? "Untitled",
-      created:
-        p.created_time,
-      actions: {
-        Do: `${env.BASE_URL}/action/move?id=${p.id}&status=Do`,
-        Someday: `${env.BASE_URL}/action/move?id=${p.id}&status=Someday`,
-        Drop: `${env.BASE_URL}/action/move?id=${p.id}&status=Drop`
+  return new Response(
+    JSON.stringify({
+      count: inbox.length,
+      items: inbox.map(p => ({
+        id: p.id,
+        title:
+          p.properties.Name?.title?.[0]?.text?.content ?? "Untitled",
+        created: p.created_time,
+        actions: {
+          Do: `${env.BASE_URL}/action/move?id=${p.id}&status=Do`,
+          Someday: `${env.BASE_URL}/action/move?id=${p.id}&status=Someday`,
+          Drop: `${env.BASE_URL}/action/move?id=${p.id}&status=Drop`
+        }
+      }))
+    }),
+    {
+      headers: {
+        "Content-Type": "application/json; charset=UTF-8"
       }
-    }))
-  });
+    }
+  );
 }
 
 

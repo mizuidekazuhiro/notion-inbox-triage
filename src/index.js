@@ -24,6 +24,19 @@ if (url.pathname === "/api/inbox") {
   return inboxList(request, env);
 }
 
+// =====================
+// Inbox HTML（ブラウザ確認用）
+// =====================
+if (url.pathname === "/inbox") {
+  const inbox = await fetchInbox(env);
+  const html = buildInboxMail(inbox, env.BASE_URL);
+
+  return new Response(html, {
+    headers: {
+      "Content-Type": "text/html; charset=UTF-8"
+    }
+  });
+}
 
     
 // =====================

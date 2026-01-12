@@ -25,12 +25,20 @@ if (url.pathname === "/mail/content") {
   const inbox = await fetchInbox(env);
   const body = buildInboxMail(inbox, env.BASE_URL);
 
-  return Response.json({
-    subject: `Inbox｜${inbox.length} 件`,
-    body,
-    count: inbox.length
-  });
+  return new Response(
+    JSON.stringify({
+      subject: `Inbox｜${inbox.length} 件`,
+      body,
+      count: inbox.length
+    }),
+    {
+      headers: {
+        "Content-Type": "application/json; charset=UTF-8"
+      }
+    }
+  );
 }
+
 
 
 

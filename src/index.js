@@ -184,11 +184,26 @@ if (url.pathname === "/mail/content") {
         }
       );
 
-      return Response.json({
-        ok: true,
-        moved_to: status,
-        task_id: taskId
-      });
+      return new Response(
+        `
+        <html>
+          <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+          </head>
+          <body>
+            <script>
+              window.close();
+            </script>
+            <p>処理しました。画面を閉じています…</p>
+          </body>
+        </html>
+        `,
+        {
+          headers: {
+            "Content-Type": "text/html; charset=UTF-8"
+          }
+        }
+      );
     }
 
     // =====================

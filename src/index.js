@@ -17,9 +17,7 @@ export default {
         token_length: env.NOTION_TOKEN?.length
       });
     }
-    // =====================
-    // Mail 手動テスト
-    // =====================
+
 // =====================
 // テスト用：mailto生成
 // =====================
@@ -191,7 +189,7 @@ if (url.pathname === "/mail/content") {
       //},
       //env   // ← これが必要
     //);
-  //} // ← scheduled の閉じ括弧
+  } // ← scheduled の閉じ括弧
 
   }; // ← export default オブジェクトの閉じ括弧とセミコロン
 

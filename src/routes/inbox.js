@@ -13,8 +13,25 @@ export async function inboxList(request, env) {
       },
       body: JSON.stringify({
         page_size: 20,
-        sorts: [{ property: "Created", direction: "ascending" }]
+        sorts: [{ property: "Created", direction: "ascending" }],
+        filter: {
+          and: [
+            {
+              property: "Processed At",
+              date: { is_empty: true }
+            },
+            {
+              property: "Processed",
+              rich_text: { is_empty: true }
+            },
+            {
+              property: "Status",
+              select: { equals: "Inbox" }
+            }
+          ]
+        }
       })
+
     }
   );
 

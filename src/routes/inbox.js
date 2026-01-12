@@ -7,7 +7,7 @@ export async function inboxList(request, env) {
     {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${env.NOTION_TOKEN}`,
+        Authorization: `Bearer ${env.NOTION_TOKEN}`,
         "Notion-Version": "2022-06-28",
         "Content-Type": "application/json"
       },
@@ -25,24 +25,24 @@ export async function inboxList(request, env) {
     title: page.properties.Name?.title?.[0]?.text?.content ?? "(No title)",
     created: page.properties.Created?.date?.start ?? null,
     actions: {
-      do: `${baseUrl}/action/move?id=${page.id}&status=Do`,
-      waiting: `${baseUrl}/action/move?id=${page.id}&status=Waiting`,
-      someday: `${baseUrl}/action/move?id=${page.id}&status=Someday`,
-      done: `${baseUrl}/action/move?id=${page.id}&status=Done`,
-      drop: `${baseUrl}/action/move?id=${page.id}&status=Drop`
+      Do: `${baseUrl}/action/move?id=${page.id}&status=Do`,
+      Waiting: `${baseUrl}/action/move?id=${page.id}&status=Waiting`,
+      Someday: `${baseUrl}/action/move?id=${page.id}&status=Someday`,
+      Done: `${baseUrl}/action/move?id=${page.id}&status=Done`,
+      Drop: `${baseUrl}/action/move?id=${page.id}&status=Drop`
     }
   }));
 
- return new Response(
-   JSON.stringify({
-     generated_at: new Date().toISOString(),
-     count: items.length,
-     items
-   }),
-   {
-     headers: {
-       "Content-Type": "application/json; charset=UTF-8"
-     }
-   }
- );
+  return new Response(
+    JSON.stringify({
+      generated_at: new Date().toISOString(),
+      count: items.length,
+      items
+    }),
+    {
+      headers: {
+        "Content-Type": "application/json; charset=UTF-8"
+      }
+    }
+  );
 }

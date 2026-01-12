@@ -1,7 +1,7 @@
-import { inboxList } from "./routes/inbox"; // ← 今回は未使用なのでコメントアウト??
+//import { inboxList } from "./routes/inbox"; // ← 今回は未使用なのでコメントアウト??
 import { fetchInbox } from "./notion/inbox";
 import { buildInboxMail } from "./mail/buildInboxMail";
-import { sendMail } from "./mail/sendMail";
+//import { sendMail } from "./mail/sendMail";
 
 export default {
   async fetch(request, env, ctx) {
@@ -23,17 +23,14 @@ export default {
 // =====================
 // テスト用：mailto生成
 // =====================
-if (url.pathname === "/test/mail") {
+if (url.pathname === "/mail/content") {
   const inbox = await fetchInbox(env);
   const body = buildInboxMail(inbox, env.BASE_URL);
 
-  const subject = `Inbox｜${inbox.length} 件`;
-
-  const mailto = `mailto:${env.MAIL_TO}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-
-  return new Response(null, {
-    status: 302,
-    headers: { Location: mailto }
+  return Response.json({
+    subject: `Inbox｜${inbox.length} 件`,
+    body,
+    count: inbox.length
   });
 }
 
@@ -182,20 +179,21 @@ if (url.pathname === "/test/mail") {
   // Cron（毎朝）
   // =====================
   async scheduled(event, env, ctx) {
-    const inbox = await fetchInbox(env);
-    const body = buildInboxMail(inbox, env.BASE_URL);
+    //何もしない　20260112
+    //const inbox = await fetchInbox(env);
+    //const body = buildInboxMail(inbox, env.BASE_URL);
 
-    await sendMail(
-      {
-        to: env.MAIL_TO,
-        subject: `Inbox｜ ${inbox.length} 件`,
-        content: body
-      },
-      env   // ← これが必要
-    );
-  } // ← scheduled の閉じ括弧
+    //await sendMail(
+      //{
+        //to: env.MAIL_TO,
+        //subject: `Inbox｜ ${inbox.length} 件`,
+        //content: body
+      //},
+      //env   // ← これが必要
+    //);
+  //} // ← scheduled の閉じ括弧
 
-}; // ← export default オブジェクトの閉じ括弧とセミコロン
+  }; // ← export default オブジェクトの閉じ括弧とセミコロン
 
 
 // =====================

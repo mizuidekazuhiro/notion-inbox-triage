@@ -21,29 +21,7 @@ export default {
 // API: Inbox JSON（Python用）
 // =====================
 if (url.pathname === "/api/inbox") {
-  const inbox = await fetchInbox(env);
-
-  return new Response(
-    JSON.stringify({
-      count: inbox.length,
-      items: inbox.map(p => ({
-        id: p.id,
-        title:
-          p.properties.Name?.title?.[0]?.text?.content ?? "Untitled",
-        created: p.created_time,
-        actions: {
-          Do: `${env.BASE_URL}/action/move?id=${p.id}&status=Do`,
-          Someday: `${env.BASE_URL}/action/move?id=${p.id}&status=Someday`,
-          Drop: `${env.BASE_URL}/action/move?id=${p.id}&status=Drop`
-        }
-      }))
-    }),
-    {
-      headers: {
-        "Content-Type": "application/json; charset=UTF-8"
-      }
-    }
-  );
+  return inboxList(request, env);
 }
 
 

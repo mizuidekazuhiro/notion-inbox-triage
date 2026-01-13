@@ -61,7 +61,37 @@ if (url.pathname === "/mail/content") {
 }
 
 
+// =====================
+// 重複チェック（最重要）
+// =====================
+const dupRes = await fetch(
+  `https://api.notion.com/v1/databases/${env.TASKS_DB_ID}/query`,
+  {
+    method: "POST",
+    headers: notionHeaders(env),
+    body: JSON.stringify({
+      filter: {
+        property: "Inbox Page ID",
+        rich_text: { equals: pageId }
+      }
+    })
+  }
+);
 
+const dup = await dupRes.json();
+if (dup.results?.length > 0) {
+  return new Response(
+    `
+    <html>
+      <body>
+        <script>window.close();</script>
+        <p>すでにタスク化されています</p>
+      </body>
+    </html>
+    `,
+    { headers: { "Content-Type": "text/html; charset=UTF-8" } }
+  );
+}
 
 
     // =====================

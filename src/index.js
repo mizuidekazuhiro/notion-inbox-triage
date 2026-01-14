@@ -90,9 +90,13 @@ if (url.pathname === "/mail/content") {
         );
       }
       
-      
-      
-      
+      // ↓↓↓ ここから先は Tasks 作成処理 ↓↓↓
+      if (!allowedStatus.includes(status)) {
+        return Response.json(
+          { error: "invalid status", allowedStatus },
+          { status: 400 }
+        );
+      }
       
       
       // =====================
@@ -126,16 +130,7 @@ if (url.pathname === "/mail/content") {
           { headers: { "Content-Type": "text/html; charset=UTF-8" } }
         );
       }
-
-  // ↓↓↓ ここから先は Tasks 作成処理 ↓↓↓
-
-      if (!allowedStatus.includes(status)) {
-        return Response.json(
-          { error: "invalid status", allowedStatus },
-          { status: 400 }
-        );
-      }
-
+      
       const pageRes = await fetch(
         `https://api.notion.com/v1/pages/${pageId}`,
         {
@@ -167,6 +162,7 @@ if (page.properties["Processed At"]?.date?.start) {
 // =====================
 // ★ ② 即ロック
 // =====================
+// ★ ② 即ロック
 const now = new Date().toISOString();
 
 await fetch(
@@ -176,7 +172,6 @@ await fetch(
     headers: notionHeaders(env),
     body: JSON.stringify({
       properties: {
-        "Processed At": { date: { start: now } },
         Processed: {
           rich_text: [{ text: { content: "processing..." } }]
         }

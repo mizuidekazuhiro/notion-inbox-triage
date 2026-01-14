@@ -90,6 +90,11 @@ if (url.pathname === "/mail/content") {
         );
       }
       
+      
+      
+      
+      
+      
       // =====================
       // ★ 重複チェック（ここが正解）
       // =====================
@@ -123,9 +128,6 @@ if (url.pathname === "/mail/content") {
       }
 
   // ↓↓↓ ここから先は Tasks 作成処理 ↓↓↓
-      
-      
-      
 
       if (!allowedStatus.includes(status)) {
         return Response.json(
@@ -151,25 +153,40 @@ if (url.pathname === "/mail/content") {
           { status: 500 }
         );
       }
+      
+      // =====================
+// ★ ① ロックチェック
+// =====================
+if (page.properties["Processed At"]?.date?.start) {
+  return new Response(
+    `<html><body><script>window.close()</script></body></html>`,
+    { headers: { "Content-Type": "text/html; charset=UTF-8" } }
+  );
+}
 
-      // すでに処理済みなら何もしない
-      if (page.properties["Processed At"]?.date?.start) {
-        return new Response(
-          `
-          <html>
-            <body>
-              <script>window.close();</script>
-              <p>すでに処理済みです</p>
-            </body>
-          </html>
-          `,
-          { headers: { "Content-Type": "text/html" } }
-        );
+// =====================
+// ★ ② 即ロック
+// =====================
+const now = new Date().toISOString();
+
+await fetch(
+  `https://api.notion.com/v1/pages/${pageId}`,
+  {
+    method: "PATCH",
+    headers: notionHeaders(env),
+    body: JSON.stringify({
+      properties: {
+        "Processed At": { date: { start: now } },
+        Processed: {
+          rich_text: [{ text: { content: "processing..." } }]
+        }
       }
+    })
+  }
+);
 
       const title =
         page.properties.Name?.title?.[0]?.text?.content ?? "Untitled";
-      const now = new Date().toISOString();
 
       // Tasks 作成
       const createRes = await fetch(

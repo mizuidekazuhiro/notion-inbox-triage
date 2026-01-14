@@ -17,260 +17,260 @@ export default {
         token_length: env.NOTION_TOKEN?.length
       });
     }
-// =====================
-// API: Inbox JSON（Python用）
-// =====================
-if (url.pathname === "/api/inbox") {
-  return inboxList(request, env);
-}
 
-// =====================
-// Inbox HTML（ブラウザ確認用）
-// =====================
-if (url.pathname === "/inbox") {
-  const inbox = await fetchInbox(env);
-  const html = buildInboxMail(inbox, env.BASE_URL);
-
-  return new Response(html, {
-    headers: {
-      "Content-Type": "text/html; charset=UTF-8"
+    // =====================
+    // API: Inbox JSON（Python用）
+    // =====================
+    if (url.pathname === "/api/inbox") {
+      return inboxList(request, env);
     }
-  });
-}
 
-    
-// =====================
-// テスト用：mailto生成
-// =====================
-if (url.pathname === "/mail/content") {
-  const inbox = await fetchInbox(env);
-  const body = buildInboxMail(inbox, env.BASE_URL);
+    // =====================
+    // Inbox HTML（ブラウザ確認用）
+    // =====================
+    if (url.pathname === "/inbox") {
+      const inbox = await fetchInbox(env);
+      const html = buildInboxMail(inbox, env.BASE_URL);
 
-  return new Response(
-    JSON.stringify({
-      subject: `Inbox｜${inbox.length} 件`,
-      body,
-      count: inbox.length
-    }),
-    {
-      headers: {
-        "Content-Type": "application/json; charset=UTF-8"
-      }
+      return new Response(html, {
+        headers: {
+          "Content-Type": "text/html; charset=UTF-8"
+        }
+      });
     }
-  );
-}
 
+    // =====================
+    // テスト用：mailto生成
+    // =====================
+    if (url.pathname === "/mail/content") {
+      const inbox = await fetchInbox(env);
+      const body = buildInboxMail(inbox, env.BASE_URL);
+
+      return new Response(
+        JSON.stringify({
+          subject: `Inbox｜${inbox.length} 件`,
+          body,
+          count: inbox.length
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json; charset=UTF-8"
+          }
+        }
+      );
+    }
 
     // =====================
     // ③ Inbox → Tasks
     // =====================
     if (url.pathname === "/action/move") {
-      
-      // method を GET 以外拒否（Gmail の prefetch 対策）
-      if (request.method !== "GET") {
-        return new Response("Method Not Allowed", { status: 405 });
-      }
-      
-      const pageId = url.searchParams.get("id");
-      const status = url.searchParams.get("status");
 
-      const allowedStatus = [
-        "Inbox",
-        "Do",
-        "Someday",
-        "Waiting",
-        "Done",
-        "Drop"
-      ];
+      // =====================
+      // GET：確認画面のみ（副作用なし）
+      // =====================
+      if (request.method === "GET") {
+        const pageId = url.searchParams.get("id");
+        const status = url.searchParams.get("status");
 
-      if (!pageId || !status) {
-        return Response.json(
-          { error: "id and status are required" },
-          { status: 400 }
-        );
-      }
-      
-      // ↓↓↓ ここから先は Tasks 作成処理 ↓↓↓
-      if (!allowedStatus.includes(status)) {
-        return Response.json(
-          { error: "invalid status", allowedStatus },
-          { status: 400 }
-        );
-      }
-      
-      
-      // =====================
-      // ★ 重複チェック（ここが正解）
-      // =====================
-      const dupRes = await fetch(
-        `https://api.notion.com/v1/databases/${env.TASKS_DB_ID}/query`,
-        {
-          method: "POST",
-          headers: notionHeaders(env),
-          body: JSON.stringify({
-            filter: {
-              property: "Inbox Page ID",
-              rich_text: { equals: pageId }
-            }
-          })
+        if (!pageId || !status) {
+          return new Response("Invalid request", { status: 400 });
         }
-      );
-    
-      const dup = await dupRes.json();
-      if (dup.results?.length > 0) {
+
         return new Response(
           `
           <html>
-            <body>
-              <script>window.close();</script>
-              <p>すでにタスク化されています</p>
+            <head>
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+            </head>
+            <body style="font-family:sans-serif">
+              <h3>このタスクを「${status}」にしますか？</h3>
+
+              <form method="POST" action="/action/move">
+                <input type="hidden" name="id" value="${pageId}">
+                <input type="hidden" name="status" value="${status}">
+                <button type="submit">確定</button>
+              </form>
+
+              <p style="font-size:12px;color:#666;">
+                ※ この画面は確認用です
+              </p>
             </body>
           </html>
           `,
           { headers: { "Content-Type": "text/html; charset=UTF-8" } }
         );
       }
-      
-      const pageRes = await fetch(
-        `https://api.notion.com/v1/pages/${pageId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${env.NOTION_TOKEN}`,
-            "Notion-Version": "2022-06-28"
-          }
-        }
-      );
 
-      const page = await pageRes.json();
-      if (!pageRes.ok) {
-        return Response.json(
-          { error: "Failed to fetch inbox page", detail: page },
-          { status: 500 }
-        );
-      }
-      
       // =====================
-// ★ ① ロックチェック
-// =====================
-if (page.properties["Processed At"]?.date?.start) {
-  return new Response(
-    `<html><body><script>window.close()</script></body></html>`,
-    { headers: { "Content-Type": "text/html; charset=UTF-8" } }
-  );
-}
+      // POST：ここから本処理
+      // =====================
+      if (request.method === "POST") {
+        const form = await request.formData();
+        const pageId = form.get("id");
+        const status = form.get("status");
 
-// =====================
-// ★ ② 即ロック
-// =====================
-// ★ ② 即ロック
-const now = new Date().toISOString();
+        const allowedStatus = [
+          "Inbox",
+          "Do",
+          "Someday",
+          "Waiting",
+          "Done",
+          "Drop"
+        ];
 
-await fetch(
-  `https://api.notion.com/v1/pages/${pageId}`,
-  {
-    method: "PATCH",
-    headers: notionHeaders(env),
-    body: JSON.stringify({
-      properties: {
-        Processed: {
-          rich_text: [{ text: { content: "processing..." } }]
+        if (!pageId || !status) {
+          return new Response("id and status are required", { status: 400 });
         }
-      }
-    })
-  }
-);
 
-      const title =
-        page.properties.Name?.title?.[0]?.text?.content ?? "Untitled";
+        if (!allowedStatus.includes(status)) {
+          return new Response("invalid status", { status: 400 });
+        }
 
-      // Tasks 作成
-      const createRes = await fetch(
-        "https://api.notion.com/v1/pages",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${env.NOTION_TOKEN}`,
-            "Notion-Version": "2022-06-28",
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            parent: { database_id: env.TASKS_DB_ID },
-            properties: {
-              名前: { title: [{ text: { content: title } }] },
-              Status: { select: { name: status } },
-              "Triage Source": { select: { name: "Manual (URL click)" } },
-              "Triage At": { date: { start: now } },
-              "Inbox Page ID": {
-                rich_text: [{ text: { content: pageId } }]
+        // =====================
+        // 重複チェック
+        // =====================
+        const dupRes = await fetch(
+          `https://api.notion.com/v1/databases/${env.TASKS_DB_ID}/query`,
+          {
+            method: "POST",
+            headers: notionHeaders(env),
+            body: JSON.stringify({
+              filter: {
+                property: "Inbox Page ID",
+                rich_text: { equals: pageId }
               }
-            }
-          })
-        }
-      );
+            })
+          }
+        );
 
-      const created = await createRes.json();
-      if (!createRes.ok) {
-        return Response.json(
-          { error: "Failed to create task", detail: created },
-          { status: 500 }
+        const dup = await dupRes.json();
+        if (dup.results?.length > 0) {
+          return new Response(
+            `<html><body><script>window.close()</script></body></html>`,
+            { headers: { "Content-Type": "text/html; charset=UTF-8" } }
+          );
+        }
+
+        // =====================
+        // Inbox ページ取得
+        // =====================
+        const pageRes = await fetch(
+          `https://api.notion.com/v1/pages/${pageId}`,
+          { headers: notionHeaders(env) }
+        );
+
+        const page = await pageRes.json();
+        if (!pageRes.ok) {
+          return new Response("Failed to fetch inbox page", { status: 500 });
+        }
+
+        // =====================
+        // ロックチェック
+        // =====================
+        if (page.properties["Processed At"]?.date?.start) {
+          return new Response(
+            `<html><body><script>window.close()</script></body></html>`,
+            { headers: { "Content-Type": "text/html; charset=UTF-8" } }
+          );
+        }
+
+        const now = new Date().toISOString();
+
+        // =====================
+        // 即ロック
+        // =====================
+        await fetch(
+          `https://api.notion.com/v1/pages/${pageId}`,
+          {
+            method: "PATCH",
+            headers: notionHeaders(env),
+            body: JSON.stringify({
+              properties: {
+                Processed: {
+                  rich_text: [{ text: { content: "processing..." } }]
+                }
+              }
+            })
+          }
+        );
+
+        const title =
+          page.properties.Name?.title?.[0]?.text?.content ?? "Untitled";
+
+        // =====================
+        // Tasks 作成
+        // =====================
+        const createRes = await fetch(
+          "https://api.notion.com/v1/pages",
+          {
+            method: "POST",
+            headers: notionHeaders(env),
+            body: JSON.stringify({
+              parent: { database_id: env.TASKS_DB_ID },
+              properties: {
+                名前: { title: [{ text: { content: title } }] },
+                Status: { select: { name: status } },
+                "Triage Source": { select: { name: "Manual (URL click)" } },
+                "Triage At": { date: { start: now } },
+                "Inbox Page ID": {
+                  rich_text: [{ text: { content: pageId } }]
+                }
+              }
+            })
+          }
+        );
+
+        const created = await createRes.json();
+        if (!createRes.ok) {
+          return new Response("Failed to create task", { status: 500 });
+        }
+
+        const taskId = created.id;
+
+        // =====================
+        // Undo URL
+        // =====================
+        await fetch(
+          `https://api.notion.com/v1/pages/${taskId}`,
+          {
+            method: "PATCH",
+            headers: notionHeaders(env),
+            body: JSON.stringify({
+              properties: {
+                "Undo URL": {
+                  url: `${url.origin}/action/undo?task_id=${taskId}`
+                }
+              }
+            })
+          }
+        );
+
+        // =====================
+        // Inbox 更新
+        // =====================
+        await fetch(
+          `https://api.notion.com/v1/pages/${pageId}`,
+          {
+            method: "PATCH",
+            headers: notionHeaders(env),
+            body: JSON.stringify({
+              properties: {
+                Processed: {
+                  rich_text: [{ text: { content: `Moved to ${status}` } }]
+                },
+                "Processed At": { date: { start: now } }
+              }
+            })
+          }
+        );
+
+        return new Response(
+          `<html><body><script>window.close()</script></body></html>`,
+          { headers: { "Content-Type": "text/html; charset=UTF-8" } }
         );
       }
 
-      const taskId = created.id;
-
-      // Undo URL
-      await fetch(
-        `https://api.notion.com/v1/pages/${taskId}`,
-        {
-          method: "PATCH",
-          headers: notionHeaders(env),
-          body: JSON.stringify({
-            properties: {
-              "Undo URL": {
-                url: `${url.origin}/action/undo?task_id=${taskId}`
-              }
-            }
-          })
-        }
-      );
-
-      // Inbox 更新
-      await fetch(
-        `https://api.notion.com/v1/pages/${pageId}`,
-        {
-          method: "PATCH",
-          headers: notionHeaders(env),
-          body: JSON.stringify({
-            properties: {
-              Processed: {
-                rich_text: [{ text: { content: `Moved to ${status}` } }]
-              },
-              "Processed At": { date: { start: now } }
-            }
-          })
-        }
-      );
-
-      return new Response(
-        `
-        <html>
-          <head>
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-          </head>
-          <body>
-            <script>
-              window.close();
-            </script>
-            <p>処理しました。画面を閉じています…</p>
-          </body>
-        </html>
-        `,
-        {
-          headers: {
-            "Content-Type": "text/html; charset=UTF-8"
-          }
-        }
-      );
+      return new Response("Method Not Allowed", { status: 405 });
     }
 
     // =====================
@@ -283,27 +283,11 @@ await fetch(
     return new Response("Not Found", { status: 404 });
   },
 
-
   // =====================
   // Cron（毎朝）
   // =====================
-  async scheduled(event, env, ctx) {
-    //何もしない　20260112
-    //const inbox = await fetchInbox(env);
-    //const body = buildInboxMail(inbox, env.BASE_URL);
-
-    //await sendMail(
-      //{
-        //to: env.MAIL_TO,
-        //subject: `Inbox｜ ${inbox.length} 件`,
-        //content: body
-      //},
-      //env   // ← これが必要
-    //);
-  } // ← scheduled の閉じ括弧
-
-  }; // ← export default オブジェクトの閉じ括弧とセミコロン
-
+  async scheduled(event, env, ctx) {}
+};
 
 // =====================
 // Undo handler
@@ -355,25 +339,9 @@ async function handleUndo(url, env) {
   );
 
   return new Response(
-  `
-  <html>
-    <head>
-      <meta name="viewport" content="width=device-width, initial-scale=1">
-    </head>
-    <body>
-      <script>
-        window.close();
-      </script>
-      <p>Undo 完了。画面を閉じています…</p>
-    </body>
-  </html>
-  `,
-  {
-    headers: {
-      "Content-Type": "text/html; charset=UTF-8"
-    }
-  }
-);
+    `<html><body><script>window.close()</script></body></html>`,
+    { headers: { "Content-Type": "text/html; charset=UTF-8" } }
+  );
 }
 
 function notionHeaders(env) {

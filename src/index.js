@@ -64,6 +64,31 @@ export default {
     // ③ Inbox → Tasks（1クリック版）
     // =====================
     if (url.pathname === "/action/move") {
+      
+      
+          // =====================
+          // ★ 自動リンクスキャン対策
+          // GET では何もしない（確認ページのみ）
+          // =====================
+          if (request.method !== "POST") {
+            return new Response(
+              `
+              <html>
+                <body style="font-family:sans-serif;padding:24px">
+                  <h3>Inbox action</h3>
+                  <p>この操作はまだ実行されていません。</p>
+                  <form method="POST">
+                    <button style="font-size:16px;padding:8px 16px">
+                      実行する
+                    </button>
+                  </form>
+                </body>
+              </html>
+              `,
+              { headers: { "Content-Type": "text/html; charset=UTF-8" } }
+            );
+          }
+      
       const pageId = url.searchParams.get("id");
       const status = url.searchParams.get("status");
     

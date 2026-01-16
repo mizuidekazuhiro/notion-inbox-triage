@@ -65,6 +65,22 @@ export default {
     // =====================
     if (url.pathname === "/action/move") {
 
+// =====================
+  // ① GET / HEAD 対応（即POST HTML）
+  // =====================
+  if (request.method !== "POST") {
+    return new Response(/* HTML */);
+  }
+
+  // =====================
+  // ② ★最後の一手はここ★
+  // =====================
+  const fetchSite = request.headers.get("Sec-Fetch-Site");
+
+  if (fetchSite !== "same-origin") {
+    return new Response("Blocked (not human click)", { status: 403 });
+  }
+
   // =====================
   // ★ 自動リンクスキャン対策（最終形）
   // =====================

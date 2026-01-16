@@ -65,24 +65,8 @@ export default {
     // =====================
     if (url.pathname === "/action/move") {
 
-// =====================
-  // ① GET / HEAD 対応（即POST HTML）
   // =====================
-  if (request.method !== "POST") {
-    return new Response(/* HTML */);
-  }
-
-  // =====================
-  // ② ★最後の一手はここ★
-  // =====================
-  const fetchSite = request.headers.get("Sec-Fetch-Site");
-
-  if (fetchSite !== "same-origin") {
-    return new Response("Blocked (not human click)", { status: 403 });
-  }
-
-  // =====================
-  // ★ 自動リンクスキャン対策（最終形）
+  // ① GET / HEAD → 即POST HTML
   // =====================
   if (request.method !== "POST") {
     return new Response(
@@ -94,7 +78,6 @@ export default {
         </head>
         <body style="font-family:sans-serif;padding:24px">
           <p>処理中です…</p>
-
           <script>
             fetch(location.href, { method: "POST" })
               .then(() => {
@@ -118,7 +101,15 @@ export default {
   }
 
   // =====================
-  // ★★★ これが抜けていた ★★★
+  // ② ★最後の一手（人間判定）★
+  // =====================
+  const fetchSite = request.headers.get("Sec-Fetch-Site");
+  if (fetchSite !== "same-origin") {
+    return new Response("Blocked (not human click)", { status: 403 });
+  }
+
+  // =====================
+  // ③ パラメータ取得・検証
   // =====================
   const pageId = url.searchParams.get("id");
   const status = url.searchParams.get("status");
@@ -139,9 +130,6 @@ export default {
   if (!allowedStatus.includes(status)) {
     return new Response("invalid status", { status: 400 });
   }
-
-  // （以下 Notion 処理はそのまま）
-
 
       // =====================
       // Inbox ページ取得

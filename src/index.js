@@ -65,49 +65,44 @@ export default {
     // =====================
     if (url.pathname === "/action/move") {
       
-      
-          // =====================
-          // ★ 自動リンクスキャン対策
-          // GET では何もしない（確認ページのみ）
-          // =====================
-          if (request.method !== "POST") {
-            return new Response(
-              `
-              <html>
-                <body style="font-family:sans-serif;padding:24px">
-                  <h3>Inbox action</h3>
-                  <p>この操作はまだ実行されていません。</p>
-                  <form method="POST">
-                    <button style="font-size:16px;padding:8px 16px">
-                      実行する
-                    </button>
-                  </form>
-                </body>
-              </html>
-              `,
-              { headers: { "Content-Type": "text/html; charset=UTF-8" } }
-            );
-          }
-      
-      const pageId = url.searchParams.get("id");
-      const status = url.searchParams.get("status");
-    
-      const allowedStatus = [
-        "Inbox",
-        "Do",
-        "Someday",
-        "Waiting",
-        "Done",
-        "Drop"
-      ];
-    
-      if (!pageId || !status) {
-        return new Response("id and status are required", { status: 400 });
+// =====================
+// ★ 自動リンクスキャン対策（最終形）
+// POST 以外は HTML を返し、JSで即POST
+// =====================
+if (request.method !== "POST") {
+  return new Response(
+    `
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <meta name="robots" content="noindex,nofollow" />
+      </head>
+      <body style="font-family:sans-serif;padding:24px">
+        <p>処理中です…</p>
+
+        <script>
+          fetch(location.href, { method: "POST" })
+            .then(() => {
+              document.body.innerHTML = "<p>完了しました</p>";
+              setTimeout(() => window.close(), 500);
+            })
+            .catch(() => {
+              document.body.innerHTML = "<p>エラーが発生しました</p>";
+            });
+        </script>
+      </body>
+    </html>
+    `,
+    {
+      headers: {
+        "Content-Type": "text/html; charset=UTF-8",
+        "Cache-Control": "no-store"
       }
-    
-      if (!allowedStatus.includes(status)) {
-        return new Response("invalid status", { status: 400 });
-      }
+    }
+  );
+}
+
+
     
       // =====================
       // Inbox ページ取得

@@ -66,46 +66,18 @@ export default {
     if (url.pathname === "/action/move") {
 
   // =====================
-  // ① GET / HEAD → 即POST HTML
+  // ★ POST 以外は即拒否
   // =====================
   if (request.method !== "POST") {
-    return new Response(
-      `
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <meta name="robots" content="noindex,nofollow" />
-        </head>
-        <body style="font-family:sans-serif;padding:24px">
-          <p>処理中です…</p>
-          <script>
-            fetch(location.href, { method: "POST" })
-              .then(() => {
-                document.body.innerHTML = "<p>完了しました</p>";
-                setTimeout(() => window.close(), 500);
-              })
-              .catch(() => {
-                document.body.innerHTML = "<p>エラーが発生しました</p>";
-              });
-          </script>
-        </body>
-      </html>
-      `,
-      {
-        headers: {
-          "Content-Type": "text/html; charset=UTF-8",
-          "Cache-Control": "no-store"
-        }
-      }
-    );
+    return new Response("Method Not Allowed", { status: 405 });
   }
 
   // =====================
-  // ② ★最後の一手（人間判定）★
+  // ★ 人間ブラウザ確認（補助）
   // =====================
   const fetchSite = request.headers.get("Sec-Fetch-Site");
   if (fetchSite !== "same-origin") {
-    return new Response("Blocked (not human click)", { status: 403 });
+    return new Response("Blocked", { status: 403 });
   }
 
   // =====================

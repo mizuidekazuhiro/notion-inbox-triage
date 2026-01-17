@@ -93,7 +93,7 @@ export default {
         const pageId = (url.searchParams.get("id") || "").trim();
         const status = normalizeStatus(url.searchParams.get("status") || "");
     
-        const allowedStatus = ["Inbox", "Do", "Someday", "Waiting", "Done", "Drop"];
+        const allowedStatus = ["Inbox", "Do", "Thinking", "Someday", "Waiting", "Done", "Drop"];
     
         if (!pageId || !status) {
           return new Response("id and status are required", { status: 400 });
@@ -149,7 +149,7 @@ async function handleMoveByBody(request, env) {
   const pageId = typeof body?.id === "string" ? body.id.trim() : "";
   const status = normalizeStatus(typeof body?.status === "string" ? body.status : "");
 
-  const allowedStatus = ["Inbox", "Do", "Someday", "Waiting", "Done", "Drop"];
+  const allowedStatus = ["Inbox", "Do", "Thinking", "Someday", "Waiting", "Done", "Drop"];
 
   if (!pageId || !status) {
     return new Response("id and status are required", { status: 400 });
@@ -319,13 +319,21 @@ function notionHeaders(env) {
 function normalizeStatus(s) {
   const x = (s || "").trim().toLowerCase();
   if (x === "do") return "Do";
+  if (x === "thinking") return "Thinking";
   if (x === "done") return "Done";
   if (x === "waiting") return "Waiting";
   if (x === "someday") return "Someday";
   if (x === "drop") return "Drop";
   if (x === "inbox") return "Inbox";
-  // すでに正しい表記ならそのまま
-  if (s === "Do" || s === "Done" || s === "Waiting" || s === "Someday" || s === "Drop" || s === "Inbox") {
+  if (
+    s === "Do" ||
+    s === "Thinking" ||
+    s === "Done" ||
+    s === "Waiting" ||
+    s === "Someday" ||
+    s === "Drop" ||
+    s === "Inbox"
+  ) {
     return s;
   }
   return s;

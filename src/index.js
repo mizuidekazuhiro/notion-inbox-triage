@@ -88,39 +88,34 @@ export default {
     return new Response("Method Not Allowed", { status: 405 });
   }
 
+// =====================
+// ③ パラメータ取得・検証（強化版）
+// =====================
+const pageId = (url.searchParams.get("id") || "").trim();
+let status = (url.searchParams.get("status") || "").trim();
 
-  // =====================
-  // ③ パラメータ取得・検証
-  // =====================
-  const pageId = url.searchParams.get("id");
-  let status = url.searchParams.get("status") || "";
-  
-  // ---- 正規化（見えない空白・改行を除去）----
-  status = status.trim();
-  
-  // ---- 表記ゆれ吸収（ショートカット側の揺れ対策）----
-  if (status === "Sometime") status = "Someday";
-  if (status === "メニューの終了" || status === "Cancel" || status === "キャンセル") {
-    return new Response("Cancelled", { status: 200 });
-  }
+// 表記ゆれ吸収（念のため）
+const normalize = {
+  "Sometime": "Someday",
+  "Someday ": "Someday",
+  "Done ": "Done",
+  "Do ": "Do",
+  "Waiting ": "Waiting",
+  "Drop ": "Drop",
+};
+if (normalize[status]) status = normalize[status];
 
+const allowedStatus = ["Inbox", "Do", "Someday", "Waiting", "Done", "Drop"];
 
-  const allowedStatus = [
-    "Inbox",
-    "Do",
-    "Someday",
-    "Waiting",
-    "Done",
-    "Drop"
-  ];
+if (!pageId || !status) {
+  return new Response(`id/status required (id="${pageId}", status="${status}")`, { status: 400 });
+}
 
-  if (!pageId || !status) {
-    return new Response("id and status are required", { status: 400 });
-  }
-
-  if (!allowedStatus.includes(status)) {
-    return new Response("invalid status", { status: 400 });
-  }
+if (!allowedStatus.includes(status)) {
+  // デバッグ用：何が来てるか見える化（空白/改行も分かる）
+  const codes = Array.from(status).map(c => c.charCodeAt(0)).join(",");
+  return new Response(`invalid status: "${status}" (charCodes:${codes})`, { status: 400 });
+}
 
       // =====================
       // Inbox ページ取得

@@ -32,7 +32,13 @@ export default {
     if (url.pathname === "/api/inbox/shortcut") {
       const inbox = await fetchInbox(env);
     
-      const choices = inbox.map((item) => ({
+      const choices = inbox
+      .filter((item) => {
+        const processedText = (item.processed || "").trim();   // ← fetchInboxが返す形により後で調整
+        const processedAt = item.processedAt || "";
+        return !processedText && !processedAt;
+      })
+      .map((item) => ({
         label: item.title || "Untitled",
         value: item.id
       }));

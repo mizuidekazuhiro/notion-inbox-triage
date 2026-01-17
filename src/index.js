@@ -85,10 +85,28 @@ export default {
     // =====================
     // ③ Inbox → Tasks（ショートカット用：POST JSON）
     // 受け取るJSON: { "id": "<pageId>", "status": "Do" }
-    // =====================
+    // ====================
     if (url.pathname === "/action/move") {
-      return handleMoveByBody(request, env);
-    }
+      // GET: /action/move?id=...&status=Do
+      if (request.method === "GET") {
+        const pageId = (url.searchParams.get("id") || "").trim();
+        const status = normalizeStatus(url.searchParams.get("status") || "");
+    
+        const allowedStatus = ["Inbox", "Do", "Someday", "Waiting", "Done", "Drop"];
+    
+        if (!pageId || !status) {
+          return new Response("id and status are required", { status: 400 });
+        }
+        if (!allowedStatus.includes(status)) {
+          return new Response("invalid status", { status: 400 });
+        }
+    
+        return handleMoveCore({ env, pageId, status });
+      }
+
+  // POST: JSON body {id, status}
+  return handleMoveByBody(request, env);
+}
 
     // =====================
     // Undo

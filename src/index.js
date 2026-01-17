@@ -33,7 +33,7 @@ export default {
       const inbox = await fetchInbox(env);
     
       const choices = inbox.map((item) => {
-        const title = (item.title || "Untitled").replaceAll("||", " ");
+        const title = (item.title || "Untitled").split("||").join(" ");
         return `${title}||${item.id}`;
       });
     

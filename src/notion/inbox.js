@@ -9,19 +9,25 @@ export async function fetchInbox(env) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        filter: {
-          property: "Processed",
-          rich_text: {
-            is_empty: true
-          }
-        },
-        sorts: [
+      filter: {
+        and: [
           {
-            property: "Created",
-            direction: "ascending"
+            property: "Processed",
+            rich_text: { is_empty: true }
+          },
+          {
+            property: "Processed At",
+            date: { is_empty: true }
           }
         ]
-      })
+      },
+      sorts: [
+        {
+          property: "Created",
+          direction: "ascending"
+        }
+      ]
+    })
     }
   );
 

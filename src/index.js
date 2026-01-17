@@ -80,27 +80,43 @@ export default {
         }
       );
     }
+//actionmove
 
-    // =====================
-    // ③ Inbox → Tasks（ショートカット安定版）
-    // /action/move/do?id=...
-    // /action/move/done?id=...
-    // /action/move/waiting?id=...
-    // /action/move/someday?id=...
-    // /action/move/drop?id=...
-    // 互換: /action/move?id=...&status=Do
-    // =====================
+if (url.pathname === "/action/move") {
 
-    // 互換: /action/move?id=...&status=Do
-    if (url.pathname === "/action/move") {
-      return handleMoveByQuery(request, env, url);
-    }
+  if (request.method !== "POST") {
+    return new Response("Method Not Allowed", { status: 405 });
+  }
 
-    // 新: /action/move/<status>
-    if (url.pathname.startsWith("/action/move/")) {
-      return handleMoveByPath(request, env, url);
-    }
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return new Response("Invalid JSON body", { status: 400 });
+  }
 
+  const pageId = body.id;
+  const status = body.status;
+
+  const allowedStatus = [
+    "Inbox",
+    "Do",
+    "Someday",
+    "Waiting",
+    "Done",
+    "Drop"
+  ];
+
+  if (!pageId || !status) {
+    return new Response("id and status are required", { status: 400 });
+  }
+
+  if (!allowedStatus.includes(status)) {
+    return new Response("invalid status", { status: 400 });
+  }
+
+  // ↓↓↓ ここから下は今のコードをそのまま ↓↓↓
+    
     // =====================
     // Undo
     // =====================

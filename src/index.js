@@ -180,11 +180,15 @@ async function handleMoveCore({ env, pageId, status }) {
   // =====================
   // すでに処理済みなら何もしない
   // =====================
-  if (page.properties["Processed At"]?.date?.start) {
+  const processedText =
+  page.properties["Processed"]?.rich_text?.[0]?.plain_text?.trim() || "";
+
+  const processedAt =
+    page.properties["Processed At"]?.date?.start || "";
+  
+  if (processedText || processedAt) {
     return new Response("Already processed", { status: 200 });
   }
-
-  const now = new Date().toISOString();
 
   // =====================
   // 即ロック（軽い二重実行対策）

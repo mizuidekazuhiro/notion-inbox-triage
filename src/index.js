@@ -1,4 +1,4 @@
-import { inboxList } from "./routes/inbox"; 
+import { inboxList } from "./routes/inbox";
 import { fetchInbox } from "./notion/inbox";
 import { buildInboxMail } from "./mail/buildInboxMail";
 //import { sendMail } from "./mail/sendMail";
@@ -24,26 +24,25 @@ export default {
     if (url.pathname === "/api/inbox") {
       return inboxList(request, env);
     }
-    
+
     // =====================
     // API: Inbox choices（iOSショートカット用）
     // =====================
     if (url.pathname === "/api/inbox/shortcut") {
       const inbox = await fetchInbox(env);
-    
-      const choices = inbox.map(item => ({
+
+      const choices = inbox.map((item) => ({
         label: item.title || "Untitled",
         value: item.id
       }));
-    
+
       return new Response(JSON.stringify({ choices }), {
         headers: {
-          "Content-Type": "application/json; charset=UTF-8"
+          "Content-Type": "application/json; charset=UTF-8",
+          "Cache-Control": "no-store"
         }
       });
     }
-    
-    
 
     // =====================
     // Inbox HTML（ブラウザ確認用）
@@ -54,7 +53,8 @@ export default {
 
       return new Response(html, {
         headers: {
-          "Content-Type": "text/html; charset=UTF-8"
+          "Content-Type": "text/html; charset=UTF-8",
+          "Cache-Control": "no-store"
         }
       });
     }
@@ -74,159 +74,31 @@ export default {
         }),
         {
           headers: {
-            "Content-Type": "application/json; charset=UTF-8"
-          }
-        }
-      );
-    }
-    // =====================
-    // iPhoneショートカット専用（読むだけ）
-    // =====================
-    if (url.pathname === "/shortcut/inbox") {
-      const inbox = await fetchInbox(env);
-    
-      return new Response(
-        JSON.stringify(inbox),
-        {
-          headers: {
-            "Content-Type": "application/json; charset=UTF-8"
+            "Content-Type": "application/json; charset=UTF-8",
+            "Cache-Control": "no-store"
           }
         }
       );
     }
 
+    // =====================
+    // ③ Inbox → Tasks（ショートカット安定版）
+    // /action/move/do?id=...
+    // /action/move/done?id=...
+    // /action/move/waiting?id=...
+    // /action/move/someday?id=...
+    // /action/move/drop?id=...
+    // 互換: /action/move?id=...&status=Do
+    // =====================
 
-    // =====================
-    // ③ Inbox → Tasks（1クリック版）
-    // =====================
+    // 互換: /action/move?id=...&status=Do
     if (url.pathname === "/action/move") {
+      return handleMoveByQuery(request, env, url);
+    }
 
-  // =====================
-  // ★ POST 以外は即拒否
-  // =====================
-  if (request.method !== "POST") {
-    return new Response("Method Not Allowed", { status: 405 });
-  }
-
-// =====================
-// ③ パラメータ取得・検証（強化版）
-// =====================
-const pageId = (url.searchParams.get("id") || "").trim();
-let status = (url.searchParams.get("status") || "").trim();
-
-// 表記ゆれ吸収（念のため）
-const normalize = {
-  "Sometime": "Someday",
-  "Someday ": "Someday",
-  "Done ": "Done",
-  "Do ": "Do",
-  "Waiting ": "Waiting",
-  "Drop ": "Drop",
-};
-if (normalize[status]) status = normalize[status];
-
-const allowedStatus = ["Inbox", "Do", "Someday", "Waiting", "Done", "Drop"];
-
-if (!pageId || !status) {
-  return new Response(`id/status required (id="${pageId}", status="${status}")`, { status: 400 });
-}
-
-if (!allowedStatus.includes(status)) {
-  // デバッグ用：何が来てるか見える化（空白/改行も分かる）
-  const codes = Array.from(status).map(c => c.charCodeAt(0)).join(",");
-  return new Response(`invalid status: "${status}" (charCodes:${codes})`, { status: 400 });
-}
-
-      // =====================
-      // Inbox ページ取得
-      // =====================
-      const pageRes = await fetch(
-        `https://api.notion.com/v1/pages/${pageId}`,
-        { headers: notionHeaders(env) }
-      );
-    
-      const page = await pageRes.json();
-      if (!pageRes.ok) {
-        return new Response("Failed to fetch inbox page", { status: 500 });
-      }
-    
-      // =====================
-      // ★ 最重要：すでに処理済みなら何もしない
-      // =====================
-      if (page.properties["Processed At"]?.date?.start) {
-        return new Response("Already processed", { status: 200 });
-      }
-    
-      const now = new Date().toISOString();
-    
-      // =====================
-      // 即ロック
-      // =====================
-      await fetch(
-        `https://api.notion.com/v1/pages/${pageId}`,
-        {
-          method: "PATCH",
-          headers: notionHeaders(env),
-          body: JSON.stringify({
-            properties: {
-              Processed: {
-                rich_text: [{ text: { content: "processing..." } }]
-              }
-            }
-          })
-        }
-      );
-    
-      const title =
-        page.properties.Name?.title?.[0]?.text?.content ?? "Untitled";
-    
-      // =====================
-      // Tasks 作成
-      // =====================
-      const createRes = await fetch(
-        "https://api.notion.com/v1/pages",
-        {
-          method: "POST",
-          headers: notionHeaders(env),
-          body: JSON.stringify({
-            parent: { database_id: env.TASKS_DB_ID },
-            properties: {
-              名前: { title: [{ text: { content: title } }] },
-              Status: { select: { name: status } },
-              "Triage Source": { select: { name: "Mail click" } },
-              "Triage At": { date: { start: now } },
-              "Inbox Page ID": {
-                rich_text: [{ text: { content: pageId } }]
-              }
-            }
-          })
-        }
-      );
-    
-      if (!createRes.ok) {
-        return new Response("Failed to create task", { status: 500 });
-      }
-
-      // =====================
-      // Inbox 更新
-      // =====================
-      await fetch(
-        `https://api.notion.com/v1/pages/${pageId}`,
-        {
-          method: "PATCH",
-          headers: notionHeaders(env),
-          body: JSON.stringify({
-            properties: {
-              Processed: {
-                rich_text: [{ text: { content: `Moved to ${status}` } }]
-              },
-              "Processed At": { date: { start: now } }
-            }
-          })
-        }
-      );
-    
-      return new Response(`Moved to ${status}`, { status: 200 });
+    // 新: /action/move/<status>
+    if (url.pathname.startsWith("/action/move/")) {
+      return handleMoveByPath(request, env, url);
     }
 
     // =====================
@@ -246,6 +118,156 @@ if (!allowedStatus.includes(status)) {
 };
 
 // =====================
+// Move handler (path version): /action/move/<status>
+// =====================
+async function handleMoveByPath(request, env, url) {
+  // Optional: shared secret for shortcuts
+  // If you set env.SHORTCUT_TOKEN, shortcut must send header "X-Shortcut-Token"
+  if (env.SHORTCUT_TOKEN) {
+    const token = request.headers.get("X-Shortcut-Token");
+    if (token !== env.SHORTCUT_TOKEN) {
+      return new Response("Forbidden", { status: 403 });
+    }
+  }
+
+  const parts = url.pathname.split("/").filter(Boolean); // ["action","move","do"]
+  const statusRaw = parts[2] || "";
+  const status = normalizeStatus(statusRaw);
+
+  const allowedStatus = ["Inbox", "Do", "Someday", "Waiting", "Done", "Drop"];
+  if (!allowedStatus.includes(status)) {
+    return new Response(`invalid status`, { status: 400 });
+  }
+
+  // id can come from query (?id=...) or JSON body {"id": "..."}
+  const pageId =
+    url.searchParams.get("id") ||
+    (await readJsonIdIfAny(request).catch(() => null));
+
+  if (!pageId) {
+    return new Response("id is required", { status: 400 });
+  }
+
+  return handleMoveCore({ request, env, pageId, status });
+}
+
+// =====================
+// Move handler (query version): /action/move?id=...&status=Do
+// =====================
+async function handleMoveByQuery(request, env, url) {
+  // Optional: shared secret for shortcuts
+  if (env.SHORTCUT_TOKEN) {
+    const token = request.headers.get("X-Shortcut-Token");
+    if (token !== env.SHORTCUT_TOKEN) {
+      return new Response("Forbidden", { status: 403 });
+    }
+  }
+
+  const pageId = url.searchParams.get("id");
+  const statusRaw = url.searchParams.get("status") || "";
+  const status = normalizeStatus(statusRaw);
+
+  const allowedStatus = ["Inbox", "Do", "Someday", "Waiting", "Done", "Drop"];
+
+  if (!pageId || !status) {
+    return new Response("id and status are required", { status: 400 });
+  }
+  if (!allowedStatus.includes(status)) {
+    return new Response("invalid status", { status: 400 });
+  }
+
+  return handleMoveCore({ request, env, pageId, status });
+}
+
+// =====================
+// Move core
+// =====================
+async function handleMoveCore({ request, env, pageId, status }) {
+  // Accept POST/GET (Shortcuts "URLの内容を取得" can be GET or POST)
+  // We do not require Sec-Fetch headers here.
+
+  // =====================
+  // Inbox ページ取得
+  // =====================
+  const pageRes = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
+    headers: notionHeaders(env)
+  });
+
+  const page = await pageRes.json();
+  if (!pageRes.ok) {
+    return new Response("Failed to fetch inbox page", { status: 500 });
+  }
+
+  // =====================
+  // すでに処理済みなら何もしない
+  // =====================
+  if (page.properties["Processed At"]?.date?.start) {
+    return new Response("Already processed", { status: 200 });
+  }
+
+  const now = new Date().toISOString();
+
+  // =====================
+  // 即ロック（軽い二重実行対策）
+  // =====================
+  await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
+    method: "PATCH",
+    headers: notionHeaders(env),
+    body: JSON.stringify({
+      properties: {
+        Processed: {
+          rich_text: [{ text: { content: "processing..." } }]
+        }
+      }
+    })
+  });
+
+  const title = page.properties.Name?.title?.[0]?.text?.content ?? "Untitled";
+
+  // =====================
+  // Tasks 作成
+  // =====================
+  const createRes = await fetch("https://api.notion.com/v1/pages", {
+    method: "POST",
+    headers: notionHeaders(env),
+    body: JSON.stringify({
+      parent: { database_id: env.TASKS_DB_ID },
+      properties: {
+        名前: { title: [{ text: { content: title } }] },
+        Status: { select: { name: status } },
+        "Triage Source": { select: { name: "Shortcut" } },
+        "Triage At": { date: { start: now } },
+        "Inbox Page ID": {
+          rich_text: [{ text: { content: pageId } }]
+        }
+      }
+    })
+  });
+
+  if (!createRes.ok) {
+    return new Response("Failed to create task", { status: 500 });
+  }
+
+  // =====================
+  // Inbox 更新
+  // =====================
+  await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
+    method: "PATCH",
+    headers: notionHeaders(env),
+    body: JSON.stringify({
+      properties: {
+        Processed: {
+          rich_text: [{ text: { content: `Moved to ${status}` } }]
+        },
+        "Processed At": { date: { start: now } }
+      }
+    })
+  });
+
+  return new Response(`Moved to ${status}`, { status: 200 });
+}
+
+// =====================
 // Undo handler
 // =====================
 async function handleUndo(url, env) {
@@ -254,56 +276,74 @@ async function handleUndo(url, env) {
     return new Response("task_id required", { status: 400 });
   }
 
-  const taskRes = await fetch(
-    `https://api.notion.com/v1/pages/${taskId}`,
-    { headers: notionHeaders(env) }
-  );
+  const taskRes = await fetch(`https://api.notion.com/v1/pages/${taskId}`, {
+    headers: notionHeaders(env)
+  });
 
   if (!taskRes.ok) {
     return new Response("Task not found", { status: 404 });
   }
 
   const task = await taskRes.json();
-  const inboxPageId =
-    task.properties["Inbox Page ID"]?.rich_text?.[0]?.plain_text;
+  const inboxPageId = task.properties["Inbox Page ID"]?.rich_text?.[0]?.plain_text;
 
   if (!inboxPageId) {
     return new Response("Inbox Page ID not found", { status: 400 });
   }
 
-  await fetch(
-    `https://api.notion.com/v1/pages/${inboxPageId}`,
-    {
-      method: "PATCH",
-      headers: notionHeaders(env),
-      body: JSON.stringify({
-        properties: {
-          Processed: { rich_text: [] },
-          "Processed At": { date: null }
-        }
-      })
-    }
-  );
+  await fetch(`https://api.notion.com/v1/pages/${inboxPageId}`, {
+    method: "PATCH",
+    headers: notionHeaders(env),
+    body: JSON.stringify({
+      properties: {
+        Processed: { rich_text: [] },
+        "Processed At": { date: null }
+      }
+    })
+  });
 
-  await fetch(
-    `https://api.notion.com/v1/pages/${taskId}`,
-    {
-      method: "PATCH",
-      headers: notionHeaders(env),
-      body: JSON.stringify({ archived: true })
-    }
-  );
+  await fetch(`https://api.notion.com/v1/pages/${taskId}`, {
+    method: "PATCH",
+    headers: notionHeaders(env),
+    body: JSON.stringify({ archived: true })
+  });
 
-  return new Response(
-    `<html><body><script>window.close()</script></body></html>`,
-    { headers: { "Content-Type": "text/html; charset=UTF-8" } }
-  );
+  return new Response(`<html><body><script>window.close()</script></body></html>`, {
+    headers: { "Content-Type": "text/html; charset=UTF-8" }
+  });
 }
 
+// =====================
+// Helpers
+// =====================
 function notionHeaders(env) {
   return {
     Authorization: `Bearer ${env.NOTION_TOKEN}`,
     "Notion-Version": "2022-06-28",
     "Content-Type": "application/json"
   };
+}
+
+function normalizeStatus(s) {
+  const x = (s || "").trim().toLowerCase();
+  if (x === "do") return "Do";
+  if (x === "done") return "Done";
+  if (x === "waiting") return "Waiting";
+  if (x === "someday") return "Someday";
+  if (x === "drop") return "Drop";
+  if (x === "inbox") return "Inbox";
+  // also accept exact names
+  if (s === "Do" || s === "Done" || s === "Waiting" || s === "Someday" || s === "Drop" || s === "Inbox") {
+    return s;
+  }
+  return s;
+}
+
+async function readJsonIdIfAny(request) {
+  const ct = request.headers.get("Content-Type") || "";
+  if (!ct.includes("application/json")) return null;
+  const body = await request.json();
+  if (!body) return null;
+  if (typeof body.id === "string" && body.id.trim()) return body.id.trim();
+  return null;
 }

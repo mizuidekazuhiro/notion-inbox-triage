@@ -31,18 +31,13 @@ export default {
     // =====================
     if (url.pathname === "/api/inbox/shortcut") {
       const inbox = await fetchInbox(env);
-    
-      const choices = inbox
-      .filter((item) => {
-        const processedText = (item.processed || "").trim();   // ← fetchInboxが返す形により後で調整
-        const processedAt = item.processedAt || "";
-        return !processedText && !processedAt;
-      })
-      .map((item) => ({
+
+      // ★最小修正：fetchInboxが未処理のみ返している前提なので、追加filterはしない
+      const choices = inbox.map((item) => ({
         label: item.title || "Untitled",
         value: item.id
       }));
-    
+
       return new Response(JSON.stringify({ choices }), {
         headers: {
           "Content-Type": "application/json; charset=UTF-8",
@@ -171,6 +166,8 @@ async function handleMoveByBody(request, env) {
 // Move core
 // =====================
 async function handleMoveCore({ env, pageId, status }) {
+
+  
   // =====================
   // Inbox ページ取得
   // =====================
@@ -178,10 +175,13 @@ async function handleMoveCore({ env, pageId, status }) {
     headers: notionHeaders(env)
   });
 
-  const page = await pageRes.json();
+  // ★最小修正：okチェックを先に（json()例外→1101対策）
   if (!pageRes.ok) {
-    return new Response("Failed to fetch inbox page", { status: 500 });
+    const text = await pageRes.text().catch(() => "");
+    return new Response(`Failed to fetch inbox page: ${text}`, { status: 500 });
   }
+
+  const page = await pageRes.json();
 
   // =====================
   // すでに処理済みなら何もしない
@@ -195,6 +195,9 @@ async function handleMoveCore({ env, pageId, status }) {
   if (processedText || processedAt) {
     return new Response("Already processed", { status: 200 });
   }
+  
+  // ★最小修正：now を復活（未定義→1101対策）
+  const now = new Date().toISOString();
 
   // =====================
   // 即ロック（軽い二重実行対策）

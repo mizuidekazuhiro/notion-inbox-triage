@@ -93,7 +93,17 @@ export default {
   // ③ パラメータ取得・検証
   // =====================
   const pageId = url.searchParams.get("id");
-  const status = url.searchParams.get("status");
+  let status = url.searchParams.get("status") || "";
+  
+  // ---- 正規化（見えない空白・改行を除去）----
+  status = status.trim();
+  
+  // ---- 表記ゆれ吸収（ショートカット側の揺れ対策）----
+  if (status === "Sometime") status = "Someday";
+  if (status === "メニューの終了" || status === "Cancel" || status === "キャンセル") {
+    return new Response("Cancelled", { status: 200 });
+  }
+
 
   const allowedStatus = [
     "Inbox",

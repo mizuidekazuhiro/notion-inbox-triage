@@ -26,18 +26,18 @@ export default {
     }
 
     // =====================
-    // API: Inbox choices（iOSショートカット用・安定版）
-    // 返す形式: ["title||id", ...]
+    // API: Inbox choices（iOSショートカット用）
+    // 返す形式: { choices: [ { label, value }, ... ] }
     // =====================
     if (url.pathname === "/api/inbox/shortcut") {
       const inbox = await fetchInbox(env);
     
-      const choices = inbox.map((item) => {
-        const title = (item.title || "Untitled").split("||").join(" ");
-        return `${title}||${item.id}`;
-      });
+      const choices = inbox.map((item) => ({
+        label: item.title || "Untitled",
+        value: item.id
+      }));
     
-      return new Response(JSON.stringify(choices), {
+      return new Response(JSON.stringify({ choices }), {
         headers: {
           "Content-Type": "application/json; charset=UTF-8",
           "Cache-Control": "no-store"

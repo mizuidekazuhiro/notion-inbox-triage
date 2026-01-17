@@ -27,18 +27,18 @@ export async function inboxList(request, env) {
           ]
         }
       })
-
     }
   );
 
   const data = await res.json();
 
-  const items = (data.results ?? []).map(page => ({
+  const items = (data.results ?? []).map((page) => ({
     id: page.id,
     title: page.properties.Name?.title?.[0]?.text?.content ?? "(No title)",
     created: page.properties.Created?.date?.start ?? null,
     actions: {
       Do: `${baseUrl}/action/move?id=${page.id}&status=Do`,
+      Thinking: `${baseUrl}/action/move?id=${page.id}&status=Thinking`,
       Waiting: `${baseUrl}/action/move?id=${page.id}&status=Waiting`,
       Someday: `${baseUrl}/action/move?id=${page.id}&status=Someday`,
       Done: `${baseUrl}/action/move?id=${page.id}&status=Done`,

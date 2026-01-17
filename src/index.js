@@ -88,13 +88,6 @@ export default {
     return new Response("Method Not Allowed", { status: 405 });
   }
 
-  // =====================
-  // ★ 人間ブラウザ確認（補助）
-  // =====================
-  const fetchSite = request.headers.get("Sec-Fetch-Site");
-  if (fetchSite !== "same-origin") {
-    return new Response("Blocked", { status: 403 });
-  }
 
   // =====================
   // ③ パラメータ取得・検証

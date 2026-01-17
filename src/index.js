@@ -24,6 +24,26 @@ export default {
     if (url.pathname === "/api/inbox") {
       return inboxList(request, env);
     }
+    
+    // =====================
+    // API: Inbox choices（iOSショートカット用）
+    // =====================
+    if (url.pathname === "/api/inbox/shortcut") {
+      const inbox = await fetchInbox(env);
+    
+      const choices = inbox.map(item => ({
+        label: item.title || "Untitled",
+        value: item.id
+      }));
+    
+      return new Response(JSON.stringify({ choices }), {
+        headers: {
+          "Content-Type": "application/json; charset=UTF-8"
+        }
+      });
+    }
+    
+    
 
     // =====================
     // Inbox HTML（ブラウザ確認用）

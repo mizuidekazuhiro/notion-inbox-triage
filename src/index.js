@@ -36,7 +36,7 @@ export default {
         value: item.id
       }));
 
-      return new Response(JSON.stringify({ choices }), {
+      return new Response(JSON.stringify(choices), {
         headers: {
           "Content-Type": "application/json; charset=UTF-8",
           "Cache-Control": "no-store"

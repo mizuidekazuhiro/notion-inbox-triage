@@ -27,6 +27,7 @@ export default {
 
     // =====================
     // API: Inbox choices（iOSショートカット用）
+    // 返す形式: [{label, value}, ...]
     // =====================
     if (url.pathname === "/api/inbox/shortcut") {
       const inbox = await fetchInbox(env);
@@ -80,9 +81,40 @@ export default {
         }
       );
     }
-//actionmove
 
-if (url.pathname === "/action/move") {
+    // =====================
+    // ③ Inbox → Tasks（ショートカット用：POST JSON）
+    // 受け取るJSON: { "id": "<pageId>", "status": "Do" }
+    // =====================
+    if (url.pathname === "/action/move") {
+      return handleMoveByBody(request, env);
+    }
+
+    // =====================
+    // Undo
+    // =====================
+    if (url.pathname === "/action/undo") {
+      return handleUndo(url, env);
+    }
+
+    return new Response("Not Found", { status: 404 });
+  },
+
+  async scheduled(event, env, ctx) {}
+};
+
+// =====================
+// Move handler (POST JSON body)
+// =====================
+async function handleMoveByBody(request, env) {
+  // Optional: shared secret for shortcuts
+  // SHORTCUT_TOKEN を env に入れた場合だけチェック
+  if (env.SHORTCUT_TOKEN) {
+    const token = request.headers.get("X-Shortcut-Token");
+    if (token !== env.SHORTCUT_TOKEN) {
+      return new Response("Forbidden", { status: 403 });
+    }
+  }
 
   if (request.method !== "POST") {
     return new Response("Method Not Allowed", { status: 405 });
@@ -95,113 +127,26 @@ if (url.pathname === "/action/move") {
     return new Response("Invalid JSON body", { status: 400 });
   }
 
-  const pageId = body.id;
-  const status = body.status;
+  const pageId = typeof body?.id === "string" ? body.id.trim() : "";
+  const status = normalizeStatus(typeof body?.status === "string" ? body.status : "");
 
-  const allowedStatus = [
-    "Inbox",
-    "Do",
-    "Someday",
-    "Waiting",
-    "Done",
-    "Drop"
-  ];
+  const allowedStatus = ["Inbox", "Do", "Someday", "Waiting", "Done", "Drop"];
 
   if (!pageId || !status) {
     return new Response("id and status are required", { status: 400 });
   }
 
-  if (!allowedStatus.includes(status)) {
-    return new Response("invalid status", { status: 400 });
-  }
-
-  // ↓↓↓ ここから下は今のコードをそのまま ↓↓↓
-    
-    // =====================
-    // Undo
-    // =====================
-    if (url.pathname === "/action/undo") {
-      return handleUndo(url, env);
-    }
-
-    return new Response("Not Found", { status: 404 });
-  },
-
-  // =====================
-  // Cron（毎朝）
-  // =====================
-  async scheduled(event, env, ctx) {}
-};
-
-// =====================
-// Move handler (path version): /action/move/<status>
-// =====================
-async function handleMoveByPath(request, env, url) {
-  // Optional: shared secret for shortcuts
-  // If you set env.SHORTCUT_TOKEN, shortcut must send header "X-Shortcut-Token"
-  if (env.SHORTCUT_TOKEN) {
-    const token = request.headers.get("X-Shortcut-Token");
-    if (token !== env.SHORTCUT_TOKEN) {
-      return new Response("Forbidden", { status: 403 });
-    }
-  }
-
-  const parts = url.pathname.split("/").filter(Boolean); // ["action","move","do"]
-  const statusRaw = parts[2] || "";
-  const status = normalizeStatus(statusRaw);
-
-  const allowedStatus = ["Inbox", "Do", "Someday", "Waiting", "Done", "Drop"];
   if (!allowedStatus.includes(status)) {
     return new Response(`invalid status`, { status: 400 });
   }
 
-  // id can come from query (?id=...) or JSON body {"id": "..."}
-  const pageId =
-    url.searchParams.get("id") ||
-    (await readJsonIdIfAny(request).catch(() => null));
-
-  if (!pageId) {
-    return new Response("id is required", { status: 400 });
-  }
-
-  return handleMoveCore({ request, env, pageId, status });
-}
-
-// =====================
-// Move handler (query version): /action/move?id=...&status=Do
-// =====================
-async function handleMoveByQuery(request, env, url) {
-  // Optional: shared secret for shortcuts
-  if (env.SHORTCUT_TOKEN) {
-    const token = request.headers.get("X-Shortcut-Token");
-    if (token !== env.SHORTCUT_TOKEN) {
-      return new Response("Forbidden", { status: 403 });
-    }
-  }
-
-  const pageId = url.searchParams.get("id");
-  const statusRaw = url.searchParams.get("status") || "";
-  const status = normalizeStatus(statusRaw);
-
-  const allowedStatus = ["Inbox", "Do", "Someday", "Waiting", "Done", "Drop"];
-
-  if (!pageId || !status) {
-    return new Response("id and status are required", { status: 400 });
-  }
-  if (!allowedStatus.includes(status)) {
-    return new Response("invalid status", { status: 400 });
-  }
-
-  return handleMoveCore({ request, env, pageId, status });
+  return handleMoveCore({ env, pageId, status });
 }
 
 // =====================
 // Move core
 // =====================
-async function handleMoveCore({ request, env, pageId, status }) {
-  // Accept POST/GET (Shortcuts "URLの内容を取得" can be GET or POST)
-  // We do not require Sec-Fetch headers here.
-
+async function handleMoveCore({ env, pageId, status }) {
   // =====================
   // Inbox ページ取得
   // =====================
@@ -348,18 +293,9 @@ function normalizeStatus(s) {
   if (x === "someday") return "Someday";
   if (x === "drop") return "Drop";
   if (x === "inbox") return "Inbox";
-  // also accept exact names
+  // すでに正しい表記ならそのまま
   if (s === "Do" || s === "Done" || s === "Waiting" || s === "Someday" || s === "Drop" || s === "Inbox") {
     return s;
   }
   return s;
-}
-
-async function readJsonIdIfAny(request) {
-  const ct = request.headers.get("Content-Type") || "";
-  if (!ct.includes("application/json")) return null;
-  const body = await request.json();
-  if (!body) return null;
-  if (typeof body.id === "string" && body.id.trim()) return body.id.trim();
-  return null;
 }

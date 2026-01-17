@@ -59,6 +59,22 @@ export default {
         }
       );
     }
+    // =====================
+    // iPhoneショートカット専用（読むだけ）
+    // =====================
+    if (url.pathname === "/shortcut/inbox") {
+      const inbox = await fetchInbox(env);
+    
+      return new Response(
+        JSON.stringify(inbox),
+        {
+          headers: {
+            "Content-Type": "application/json; charset=UTF-8"
+          }
+        }
+      );
+    }
+
 
     // =====================
     // ③ Inbox → Tasks（1クリック版）

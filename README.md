@@ -55,30 +55,44 @@ Cron / scheduled 実行の入口です。`runDailyInboxMail` を呼び出しま�
 ### 外部から送信する場合（GitHub Actions / Python など）
 `/mail/digest` の JSON を取得し、外部で送信します。本文生成と送信を分けることで、Workers 側に送信情報だけを置けます。
 
-## メール設定（MailChannels）
-このプロジェクトは MailChannels の HTTP API で送信します。Cloudflare Workers から送信できるようにするため、以下を設定してください。
+## メール設定（MailChannels Email API）
+このプロジェクトは MailChannels Email API を `X-Api-Key` 認証で送信します。Cloudflare Workers / GitHub Actions (Node) のどちらからでも送信できるようにするため、以下を設定してください。
+
+### 0. 事前準備（MailChannels Console）
+- MailChannels Console で Email API Key（scope: api）を作成します。
+- 送信元ドメイン（`MAIL_FROM` のドメイン）に **Domain Lockdown** の TXT レコードを追加します。
 
 ### 1. 送信元アドレスの準備
 - `MAIL_FROM` に送信元アドレス（例: `notify@example.com`）を設定します。
-- MailChannels のポリシーに合わせて、送信元ドメインが DNS で検証されていることを確認してください。
+- Domain Lockdown の TXT レコードが DNS に追加されていることを確認してください。
 - 表示名を変えたい場合は `MAIL_FROM_NAME` を設定します。
 
 ### 2. 宛先アドレスの設定
 - `MAIL_TO` に受信先アドレスを設定します。
 - 複数宛先にしたい場合は、Workers 側の `sendMail` 呼び出し前に配列化するなどの拡張が必要です。
 
-### 3. Workers の環境変数に追加
-`wrangler.toml` または Cloudflare Dashboard の Variables に設定します。
+### 3. 環境変数に追加
+`wrangler.toml` / Cloudflare Dashboard の Variables / GitHub Actions の Secrets などに設定します。
 
 ```
 MAIL_FROM="notify@example.com"
 MAIL_TO="you@example.com"
 MAIL_FROM_NAME="Notion Inbox Bot"
+MAILCHANNELS_API_KEY="your-mailchannels-email-api-key"
+MAILCHANNELS_ENDPOINT="https://api.mailchannels.net/tx/v1/send"
 ```
 
 ### 4. 動作確認
 - `/mail/digest` をブラウザで開くと、件名・本文の JSON が取得できます。
-- `scheduled()` の cron 実行、または後述の GitHub Actions から送信できます。
+- `scheduled()` の cron 実行、`scripts/test_send_mail.mjs` の実行、または後述の GitHub Actions から送信できます。
+
+#### ローカル送信テスト（Node）
+```
+MAIL_FROM="notify@example.com" \
+MAIL_TO="you@example.com" \
+MAILCHANNELS_API_KEY="your-mailchannels-email-api-key" \
+node scripts/test_send_mail.mjs
+```
 
 ## GitHub Actions で「ボタンを押して送信」する
 `.github/workflows/send-tasks-digest.yml` を用意しています。Actions の `Send Tasks Digest` を手動実行するとメールが送信されます。

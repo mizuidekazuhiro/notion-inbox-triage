@@ -57,9 +57,6 @@ Cron / scheduled 実行の入口です。`runDailyInboxMail` を呼び出しま�
 ## Tasks Digest の送信方法
 Workers は「本文生成」のみを担当し、送信は GitHub Actions から Gmail SMTP で行います。
 
-- `/mail/digest` の JSON を取得し、外部で送信します。
-- Workers 側には SMTP 認証情報を置かずに運用できます。
-
 ## Gmail SMTP（App Password）で送信する
 `scripts/send_digest_smtp.mjs` が `/mail/digest` の JSON を取得し、Gmail SMTP で送信します。
 
@@ -78,6 +75,7 @@ Workers は「本文生成」のみを担当し、送信は GitHub Actions か�
 
 ### 3. Actions で送信
 `.github/workflows/send_tasks_digest.yml` が毎朝 7:00 JST（UTC 22:00）に実行されます。手動送信する場合は `workflow_dispatch` で実行できます。
+GitHub Actions のスケジュールは UTC 基準なので、7:00 JST に合わせるには `0 22 * * *` を設定します。
 
 ### 4. ローカルで実行（任意）
 

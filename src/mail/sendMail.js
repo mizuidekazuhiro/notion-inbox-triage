@@ -34,7 +34,13 @@ async function sendViaMailChannels({ to, subject, content }, env) {
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Mail send failed: ${text}`);
+    const hint =
+      res.status === 401
+        ? " MailChannels for Cloudflare only accepts requests from Cloudflare Workers. Use wrangler dev --remote or run in production."
+        : "";
+    throw new Error(
+      `Mail send failed (${res.status}): ${text}${hint}`
+    );
   }
 }
 

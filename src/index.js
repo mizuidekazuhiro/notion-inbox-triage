@@ -3,6 +3,8 @@ import { fetchInbox } from "./notion/inbox";
 import { buildInboxMail } from "./mail/buildInboxMail";
 import { buildTasksDigestMail } from "./mail/buildTasksDigestMail";
 import { getTask, queryTasksByStatus, updateTaskStatus } from "./notion/tasks";
+import { extractBodyText, extractSubject } from "./email/parseEmail";
+import { createInboxItemFromEmail } from "./notion/inboxCreate";
 
 export default {
   async fetch(request, env, ctx) {
@@ -115,6 +117,24 @@ export default {
     }
 
     // =====================
+    // Test: create inbox item from query params
+    // =====================
+    if (url.pathname === "/test/inbox/create") {
+      const subject = (url.searchParams.get("subject") || "").trim() || "(no subject)";
+      const body = url.searchParams.get("body") || "";
+      const receivedIso = new Date().toISOString();
+      const rawText = buildRawText({
+        body,
+        from: "test",
+        receivedIso
+      });
+
+      await createInboxItemFromEmail(env, { subject, rawText, receivedIso });
+
+      return jsonResponse({ ok: true });
+    }
+
+    // =====================
     // ③ Inbox → Tasks（ショートカット用：POST JSON）
     // 受け取るJSON: { "id": "<pageId>", "status": "Do" }
     // ====================
@@ -169,6 +189,20 @@ export default {
 
   async scheduled(event, env, ctx) {
     ctx.waitUntil(runTasksDigestMail(env));
+  },
+
+  async email(message, env, ctx) {
+    const subject = extractSubject(message);
+    const body = await extractBodyText(message);
+    const receivedIso = new Date().toISOString();
+    const rawText = buildRawText({
+      body,
+      from: message.headers.get("from") || "",
+      messageId: message.headers.get("message-id") || "",
+      receivedIso
+    });
+
+    ctx.waitUntil(createInboxItemFromEmail(env, { subject, rawText, receivedIso }));
   }
 };
 
@@ -387,6 +421,17 @@ function normalizeStatus(s) {
     return s;
   }
   return s;
+}
+
+function buildRawText({ body, from, messageId, receivedIso }) {
+  const metadataLines = [
+    "---",
+    `from: ${from || "-"}`,
+    `received_at: ${receivedIso}`,
+    ...(messageId ? [`message-id: ${messageId}`] : [])
+  ];
+
+  return [body.trim(), "", ...metadataLines].join("\n");
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;

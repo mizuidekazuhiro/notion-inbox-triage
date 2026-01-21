@@ -11,6 +11,7 @@ Notion Inbox を取得し、HTML/JSONとして出力したり、Inbox から Tas
 - Tasks Digest の生成（Do / Someday）
 - ステータス変更の確認画面 + 署名付き POST 更新
 - Cron（scheduled）実行の入口
+- Cloudflare Email Routing で受信したメールを Inbox DB へ自動登録
 
 ## 主要エントリ
 ### `src/index.js`
@@ -28,12 +29,16 @@ Workers の HTTP エンドポイントを提供し、以下の用途を担いま
 - `/mail/digest`：Tasks Digest のメール本文生成
 - `/confirm`：ステータス変更の確認画面
 - `/action/task/update`：確認後のステータス更新（POST）
+- `/test/inbox/create`：テスト用 Inbox 作成（subject/body クエリ）
+
+加えて、Email Routing からの受信イベント（`email` ハンドラ）を実装しています。
 
 ### `src/index.ts`
 Cron / scheduled 実行の入口です。`runDailyInboxMail` を呼び出します。
 
 ## ディレクトリ概要
 - `src/notion/`：Notion API 呼び出し関連
+- `src/email/`：メール本文の抽出・整形
 - `src/routes/`：API ルート実装
 - `src/mail/`：メール/HTML 生成
 - `scripts/`：外部送信スクリプト
@@ -42,6 +47,7 @@ Cron / scheduled 実行の入口です。`runDailyInboxMail` を呼び出しま�
 ## 必要な環境変数（Workers）
 - `NOTION_TOKEN`
 - `TASKS_DB_ID`
+- `INBOX_DB_ID`
 - `BASE_URL`
 - `ACTION_SECRET`（Confirm 署名用の秘密鍵）
 - `SHORTCUT_TOKEN`（任意、ショートカット API の認証）
@@ -89,3 +95,27 @@ Cloudflare Workers の cron は UTC です。JST 7:00 は以下の通りです�
 1. Cloudflare Workers にデプロイ
 2. Notion API トークンと DB ID を設定
 3. 各エンドポイントを用途に応じて呼び出す
+
+## Email Routing → Notion Inbox 連携
+Cloudflare Email Routing で受信したメールを Notion の Inbox DB に「メール1通=1インボックスタスク」として登録します。
+
+### 追加・変更したファイル
+- `src/email/parseEmail.js`：件名/本文抽出と chunk 分割
+- `src/notion/inboxCreate.js`：Inbox DB へのページ作成
+- `src/index.js`：email ハンドラとテスト用エンドポイント追加
+
+### 環境変数
+- `NOTION_TOKEN`：Notion API トークン
+- `INBOX_DB_ID`：Inbox DB の ID
+
+### Cloudflare Email Routing 設定
+1. Cloudflare Dashboard で Email Routing を有効化
+2. `Inbox@kazuhiromizuide.com` を作成
+3. Destination を “Workers” に設定し、この Worker を指定
+
+### テスト用エンドポイント（任意）
+Email Routing が使えない環境では以下で Inbox 作成の動作確認ができます。
+
+```
+GET /test/inbox/create?subject=Hello&body=Test
+```

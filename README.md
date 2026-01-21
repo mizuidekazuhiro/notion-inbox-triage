@@ -102,23 +102,29 @@ Cloudflare Workers の cron は UTC です。JST 7:00 は以下の通りです�
 Cloudflare Email Routing で受信したメールを Notion の Inbox DB に「メール1通=1インボックスタスク」として登録します。
 
 ### 追加・変更したファイル
-- `src/email/parseEmail.js`：件名/本文抽出と chunk 分割
+- `src/email/parseEmail.js`：件名/本文抽出、HTML→テキスト化、Rich text chunk 分割
+- `src/notion/notionHeaders.js`：Notion API 共通ヘッダー
 - `src/notion/inboxCreate.js`：Inbox DB へのページ作成
-- `src/index.js`：email ハンドラとテスト用エンドポイント追加
+- `src/index.js`：email ハンドラの waitUntil 化とテスト用エンドポイント
 
-### 環境変数
+### 必要な環境変数
 - `NOTION_TOKEN`：Notion API トークン
 - `INBOX_DB_ID`：Inbox DB の ID
-- `INBOX_SOURCE_VALUE`：Source に入れる値（未設定なら "Email"）
 
 ### Cloudflare Email Routing 設定
 1. Cloudflare Dashboard で Email Routing を有効化
-2. `Inbox@kazuhiromizuide.com` を作成
+2. 対象アドレス（例: `Inbox@your-domain.com`）を作成
 3. Destination を “Workers” に設定し、この Worker を指定
-4. Dropped した場合は Worker Logs の "Email handler error" / "Notion create failed" を確認
+4. Dropped が出た場合は Worker Logs の `email handler scheduling failed` / `processInboundEmail failed` / `Notion create failed` を確認
+
+### 動作確認手順（Email Routing + Worker）
+1. Cloudflare Email Routing を Worker に接続
+2. 任意のメールを送信
+3. Worker Logs で受信ログと Notion 作成ログを確認
+4. Notion Inbox DB に「メール1通=1件」で登録されることを確認
 
 ### テスト用エンドポイント（任意）
-Email Routing が使えない環境では以下で Inbox 作成の動作確認ができます。
+Email Routing の挙動が不安定な場合は以下で Inbox 作成の動作確認ができます。
 
 ```
 GET /test/email-to-inbox?subject=Hello&body=Test

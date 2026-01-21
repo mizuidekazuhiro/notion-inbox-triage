@@ -31,10 +31,14 @@ export async function extractBodyText(message) {
   return "";
 }
 
-export function chunkToRichTextBlocks(text, chunkSize = 1800) {
+export function chunkToRichText(text, chunkSize = 1800) {
   const chunks = [];
   for (let i = 0; i < text.length; i += chunkSize) {
     chunks.push({ text: { content: text.slice(i, i + chunkSize) } });
   }
   return chunks;
+}
+
+export function chunkToRichTextBlocks(text, chunkSize = 1800) {
+  return chunkToRichText(text, chunkSize);
 }

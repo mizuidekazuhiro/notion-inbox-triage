@@ -3,8 +3,7 @@ import { fetchInbox } from "./notion/inbox";
 import { buildInboxMail } from "./mail/buildInboxMail";
 import { buildTasksDigestMail } from "./mail/buildTasksDigestMail";
 import { getTask, queryTasksByStatus, updateTaskStatus } from "./notion/tasks";
-import { extractBodyText, extractSubject } from "./email/parseEmail";
-import { createInboxItemFromEmail } from "./notion/inboxCreate";
+import { createInboxPageInNotion } from "./notion/inboxCreate";
 
 export default {
   async fetch(request, env, ctx) {
@@ -117,19 +116,37 @@ export default {
     }
 
     // =====================
+    // Test: create inbox item (email-style)
+    // =====================
+    if (url.pathname === "/test/email-to-inbox") {
+      const subject = (url.searchParams.get("subject") || "").trim() || "(no subject)";
+      const body = url.searchParams.get("body") || "";
+      try {
+        await createInboxPageInNotion(env, {
+          subject,
+          bodyText: body,
+          from: "test",
+          msgId: "test"
+        });
+        return new Response("OK", { status: 200 });
+      } catch (error) {
+        return new Response(`${error?.stack || error}`, { status: 500 });
+      }
+    }
+
+    // =====================
     // Test: create inbox item from query params
     // =====================
     if (url.pathname === "/test/inbox/create") {
       const subject = (url.searchParams.get("subject") || "").trim() || "(no subject)";
       const body = url.searchParams.get("body") || "";
-      const receivedIso = new Date().toISOString();
-      const rawText = buildRawText({
-        body,
-        from: "test",
-        receivedIso
-      });
 
-      await createInboxItemFromEmail(env, { subject, rawText, receivedIso });
+      await createInboxPageInNotion(env, {
+        subject,
+        bodyText: body,
+        from: "test",
+        msgId: "test"
+      });
 
       return jsonResponse({ ok: true });
     }
@@ -192,17 +209,20 @@ export default {
   },
 
   async email(message, env, ctx) {
-    const subject = extractSubject(message);
-    const body = await extractBodyText(message);
-    const receivedIso = new Date().toISOString();
-    const rawText = buildRawText({
-      body,
-      from: message.headers.get("from") || "",
-      messageId: message.headers.get("message-id") || "",
-      receivedIso
-    });
+    try {
+      const subject = message.headers.get("subject") || "(no subject)";
+      const from = message.headers.get("from") || "(unknown)";
+      const msgId = message.headers.get("message-id") || "(no message-id)";
+      console.log("Email received", { subject, from, msgId });
 
-    ctx.waitUntil(createInboxItemFromEmail(env, { subject, rawText, receivedIso }));
+      const bodyText = await message.text();
+      console.log("Body length:", bodyText.length);
+
+      await createInboxPageInNotion(env, { subject, bodyText, from, msgId });
+      console.log("Notion create OK");
+    } catch (error) {
+      console.log("Email handler error:", error?.stack || error);
+    }
   }
 };
 
@@ -421,17 +441,6 @@ function normalizeStatus(s) {
     return s;
   }
   return s;
-}
-
-function buildRawText({ body, from, messageId, receivedIso }) {
-  const metadataLines = [
-    "---",
-    `from: ${from || "-"}`,
-    `received_at: ${receivedIso}`,
-    ...(messageId ? [`message-id: ${messageId}`] : [])
-  ];
-
-  return [body.trim(), "", ...metadataLines].join("\n");
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;

@@ -29,6 +29,7 @@ Workers の HTTP エンドポイントを提供し、以下の用途を担いま
 - `/mail/digest`：Tasks Digest のメール本文生成
 - `/confirm`：ステータス変更の確認画面
 - `/action/task/update`：確認後のステータス更新（POST）
+- `/test/email-to-inbox`：Email Routing 非依存の Inbox 作成（subject/body クエリ）
 - `/test/inbox/create`：テスト用 Inbox 作成（subject/body クエリ）
 
 加えて、Email Routing からの受信イベント（`email` ハンドラ）を実装しています。
@@ -51,6 +52,7 @@ Cron / scheduled 実行の入口です。`runDailyInboxMail` を呼び出しま�
 - `BASE_URL`
 - `ACTION_SECRET`（Confirm 署名用の秘密鍵）
 - `SHORTCUT_TOKEN`（任意、ショートカット API の認証）
+- `INBOX_SOURCE_VALUE`（任意、未設定なら "Email"）
 
 ## Tasks Digest の送信方法
 Workers は「本文生成」のみを担当し、送信は GitHub Actions から Gmail SMTP で行います。
@@ -107,14 +109,20 @@ Cloudflare Email Routing で受信したメールを Notion の Inbox DB に「�
 ### 環境変数
 - `NOTION_TOKEN`：Notion API トークン
 - `INBOX_DB_ID`：Inbox DB の ID
+- `INBOX_SOURCE_VALUE`：Source に入れる値（未設定なら "Email"）
 
 ### Cloudflare Email Routing 設定
 1. Cloudflare Dashboard で Email Routing を有効化
 2. `Inbox@kazuhiromizuide.com` を作成
 3. Destination を “Workers” に設定し、この Worker を指定
+4. Dropped した場合は Worker Logs の "Email handler error" / "Notion create failed" を確認
 
 ### テスト用エンドポイント（任意）
 Email Routing が使えない環境では以下で Inbox 作成の動作確認ができます。
+
+```
+GET /test/email-to-inbox?subject=Hello&body=Test
+```
 
 ```
 GET /test/inbox/create?subject=Hello&body=Test

@@ -5,8 +5,8 @@ compatibility_date = "2024-12-01"
 [vars]
 INBOX_DB_ID = "2e2dec27c9aa809d82f0db2ca819140c"
 TASKS_DB_ID = "2e1dec27c9aa808a8e8dd8c09955e4a1"
-MAIL_FROM = "business@kazuhiromizuide.com"
-MAIL_TO = "kazuhiro.mizuide@gmail.com"
+MAIL_FROM = "notify@example.com"
+MAIL_TO = "you@example.com"
 BASE_URL = "https://notion-inbox-triage.kazuhiro-mizuide.workers.dev"
 
 [triggers]

@@ -46,29 +46,55 @@ Cron / scheduled 実行の入口です。`runDailyInboxMail` を呼び出しま�
 - `MAIL_FROM`
 - `MAIL_TO`
 - `MAIL_FROM_NAME`（任意）
-- `MAIL_PROVIDER`（`mailchannels` or `gmail`）
-- `GMAIL_CLIENT_ID`（Gmail OAuth）
-- `GMAIL_CLIENT_SECRET`（Gmail OAuth）
-- `GMAIL_REFRESH_TOKEN`（Gmail OAuth）
-- `GMAIL_SENDER`（任意、Gmailの送信元アドレス）
 - `SHORTCUT_TOKEN`（任意、ショートカット API の認証）
 
 ## Tasks Digest の送信方法
-- Workers 内で送信する場合：`MAIL_FROM` と `MAIL_TO` を設定し、`scheduled()` で `sendMail` を実行します。
-- 外部から送信する場合：`/mail/digest` の JSON を取得し、GitHub Actions / Python などで送信します。
+### Workers 内で送信する場合
+`MAIL_FROM` と `MAIL_TO` を設定し、`scheduled()` で `sendMail` を実行します。
 
-### Gmail 送信（OAuth/Refresh Token）
-Workers から Gmail API 経由で送信する場合は、以下を設定します。
+### 外部から送信する場合（GitHub Actions / Python など）
+`/mail/digest` の JSON を取得し、外部で送信します。本文生成と送信を分けることで、Workers 側に送信情報だけを置けます。
 
-- `MAIL_PROVIDER=gmail`
-- `GMAIL_CLIENT_ID` / `GMAIL_CLIENT_SECRET` / `GMAIL_REFRESH_TOKEN`
-- `MAIL_FROM`（または `GMAIL_SENDER`）
+## メール設定（MailChannels）
+このプロジェクトは MailChannels の HTTP API で送信します。Cloudflare Workers から送信できるようにするため、以下を設定してください。
 
-`MAIL_FROM` は `From:` ヘッダとして利用されます。Gmail 側の送信元設定と一致させてください。
+### 1. 送信元アドレスの準備
+- `MAIL_FROM` に送信元アドレス（例: `notify@example.com`）を設定します。
+- MailChannels のポリシーに合わせて、送信元ドメインが DNS で検証されていることを確認してください。
+- 表示名を変えたい場合は `MAIL_FROM_NAME` を設定します。
 
-### 外部送信ワーカー化の具体案
-`/mail/digest` で HTML を生成し、外部（GitHub Actions / Cloud Run など）から Gmail API で送信します。
-これにより Workers 側に Gmail 認証情報を置かずに運用できます。
+### 2. 宛先アドレスの設定
+- `MAIL_TO` に受信先アドレスを設定します。
+- 複数宛先にしたい場合は、Workers 側の `sendMail` 呼び出し前に配列化するなどの拡張が必要です。
+
+### 3. Workers の環境変数に追加
+`wrangler.toml` または Cloudflare Dashboard の Variables に設定します。
+
+```
+MAIL_FROM="notify@example.com"
+MAIL_TO="you@example.com"
+MAIL_FROM_NAME="Notion Inbox Bot"
+```
+
+### 4. 動作確認
+- `/mail/digest` をブラウザで開くと、件名・本文の JSON が取得できます。
+- `scheduled()` の cron 実行、または後述の GitHub Actions から送信できます。
+
+## GitHub Actions で「ボタンを押して送信」する
+`.github/workflows/send-tasks-digest.yml` を用意しています。Actions の `Send Tasks Digest` を手動実行するとメールが送信されます。
+
+### 事前に設定する GitHub Secrets
+リポジトリの **Settings → Secrets and variables → Actions** に以下を追加します。
+
+- `WORKER_URL`：Workers の URL（例: `https://notion-inbox-triage.example.workers.dev`）
+- `MAIL_FROM`：送信元アドレス
+- `MAIL_TO`：送信先アドレス
+- `MAIL_FROM_NAME`：任意の表示名（未設定なら `Notion Inbox Bot`）
+
+### 実行手順
+1. GitHub の **Actions** タブを開く
+2. **Send Tasks Digest** を選択
+3. **Run workflow** を押して送信
 
 ## Cron 例（JST 7:00 相当）
 Cloudflare Workers の cron は UTC です。JST 7:00 は以下の通りです。

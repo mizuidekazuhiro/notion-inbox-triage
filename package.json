@@ -1,0 +1,11 @@
+{
+  "name": "notion-inbox-triage",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "send:digest": "node scripts/send_digest_smtp.mjs"
+  },
+  "dependencies": {
+    "nodemailer": "^6.9.14"
+  }
+}

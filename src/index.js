@@ -2,7 +2,6 @@ import { inboxList } from "./routes/inbox";
 import { fetchInbox } from "./notion/inbox";
 import { buildInboxMail } from "./mail/buildInboxMail";
 import { buildTasksDigestMail } from "./mail/buildTasksDigestMail";
-import { sendMail } from "./mail/sendMail";
 import { getTask, queryTasksByStatus, updateTaskStatus } from "./notion/tasks";
 
 export default {
@@ -546,18 +545,6 @@ async function runTasksDigestMail(env) {
     env,
     baseUrl: env.BASE_URL
   });
-
-  if (env.MAIL_TO && env.MAIL_FROM) {
-    await sendMail(
-      {
-        to: env.MAIL_TO,
-        subject: result.subject,
-        content: result.body
-      },
-      env
-    );
-    return { ...result, sent: true };
-  }
 
   return { ...result, sent: false };
 }

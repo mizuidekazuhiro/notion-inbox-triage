@@ -57,6 +57,7 @@ Cron / scheduled 実行の入口です。`runDailyInboxMail` を呼び出しま�
 
 ## メール設定（MailChannels）
 このプロジェクトは MailChannels の HTTP API で送信します。Cloudflare Workers から送信できるようにするため、以下を設定してください。
+MailChannels の Cloudflare 向け API は **Cloudflare Workers からの送信のみ許可**されているため、ローカルの Node 実行などで叩くと 401 が返ります。動作確認は `wrangler dev --remote` か本番 Workers で行ってください。
 
 ### 1. 送信元アドレスの準備
 - `MAIL_FROM` に送信元アドレス（例: `notify@example.com`）を設定します。

@@ -3,6 +3,7 @@ name: Send Tasks Digest
 on:
   workflow_dispatch:
   schedule:
+    # GitHub Actions schedules are in UTC. 07:00 JST = 22:00 UTC.
     - cron: "0 22 * * *"
 
 jobs:

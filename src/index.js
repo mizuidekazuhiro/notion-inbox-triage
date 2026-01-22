@@ -326,6 +326,9 @@ async function handleMoveCore({ env, pageId, status }) {
     return new Response("Failed to create task", { status: 500 });
   }
 
+  const createdTask = await createRes.json();
+  const createdTaskId = createdTask?.id;
+
   // =====================
   // Inbox 更新
   // =====================
@@ -342,7 +345,35 @@ async function handleMoveCore({ env, pageId, status }) {
     })
   });
 
-  return new Response(`Moved to ${status}`, { status: 200 });
+  const undoPath = createdTaskId ? `/action/undo?task_id=${createdTaskId}` : "";
+  const undoUrl = env.BASE_URL ? `${env.BASE_URL}${undoPath}` : undoPath;
+  const undoLink = undoUrl
+    ? `<a href="${undoUrl}" style="color:#1a73e8;">Undo</a>`
+    : "Undo link unavailable";
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+</head>
+<body style="
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  background:#f7f7f7;
+  padding:16px;
+">
+  <div style="background:#fff; border-radius:12px; padding:16px;">
+    <p style="margin:0 0 12px 0;">Moved to ${status}</p>
+    <p style="margin:0;">${undoLink}</p>
+  </div>
+</body>
+</html>
+`;
+
+  return new Response(html, {
+    status: 200,
+    headers: { "Content-Type": "text/html; charset=UTF-8" }
+  });
 }
 
 // =====================

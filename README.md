@@ -8,7 +8,7 @@ Notion Inbox を取得し、HTML/JSONとして出力したり、Inbox から Tas
 - Inbox を HTML で確認（ブラウザ用）
 - Inbox → Tasks への移動（GET/POST）
 - Undo（作成した Task をアーカイブし、Inbox 側を復旧）
-- Tasks Digest の生成（Do / Someday）
+- Tasks Digest の生成（Do/Waiting / Someday）
 - ステータス変更の確認画面 + 署名付き POST 更新
 - Cron（scheduled）実行の入口
 - Cloudflare Email Routing で受信したメールを Inbox DB へ自動登録
@@ -26,7 +26,8 @@ Workers の HTTP エンドポイントを提供し、以下の用途を担いま
 - `/action/undo`：Undo
 - `/api/tasks/do`：Tasks の Do 一覧
 - `/api/tasks/someday`：Tasks の Someday 一覧
-- `/mail/digest`：Tasks Digest のメール本文生成
+- `/api/tasks/do-waiting`：Tasks の Do/Waiting 一覧
+- `/mail/digest`：Tasks Digest のメール本文生成（Do/Waiting を含む）
 - `/confirm`：ステータス変更の確認画面
 - `/action/task/update`：確認後のステータス更新（POST）
 - `/test/email-to-inbox`：Email Routing 非依存の Inbox 作成（subject/body クエリ）

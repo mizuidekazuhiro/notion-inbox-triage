@@ -58,6 +58,29 @@ Cron / scheduled 実行の入口です。`runDailyInboxMail` を呼び出しま�
 ## Tasks Digest の送信方法
 Workers は「本文生成」のみを担当し、送信は GitHub Actions から Gmail SMTP で行います。
 
+### 📨 Tasks Digest（Do / Waiting）の仕組み
+
+- 毎朝の Tasks Digest では、単純な「Do」だけでなく、
+  「対応すべき Waiting タスク」も Do/Waiting として表示します。
+- 対象条件は以下です。
+  - Status = Do
+  - Status = Waiting かつ
+    - Reminder Date が今日以前
+    - または Reminder Date 未設定で Waiting since から 3 日以上経過
+
+### なぜ Notion filter で判定しないのか
+- Notion Database Query は and/or の配列に undefined を含むと 400 validation_error になります。
+- Reminder Date 未設定・Waiting since 未設定のタスクが混在するため、
+  複雑な条件を filter 側で組み立てると壊れやすいです。
+- そのため、本システムでは以下の責務分離を採用しています。
+  - Notion API：Status = Do / Waiting までの粗い抽出
+  - Cloudflare Workers：Reminder Date / Waiting since / 日数計算などの業務ロジック
+
+### 安定性のための設計ルール
+- Notion filter の and/or 配列には undefined を絶対に入れない
+- date プロパティは常に null の可能性を考慮する
+- Digest 生成処理は失敗しても Worker 全体を落とさない（return [] で継続）
+
 ## Gmail SMTP（App Password）で送信する
 `scripts/send_digest_smtp.mjs` が `/mail/digest` の JSON を取得し、Gmail SMTP で送信します。
 

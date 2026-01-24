@@ -69,7 +69,7 @@ export default {
     if (url.pathname === "/api/tasks/do-waiting") {
       const todayStart = startOfJstDay(new Date());
       const todayJstStr = getJstDateString(todayStart);
-      const items = await queryDoWaitingTasks(env, todayJstStr);
+      const items = await queryDoWaitingTasks(env);
       const doWaitingItems = buildDoWaitingItems(items, todayStart);
       const sorted = sortTasksBySince(doWaitingItems, "digestSinceISO");
       return jsonResponse({ count: sorted.length, items: sorted });
@@ -682,7 +682,7 @@ async function buildTasksDigestData({ env, baseUrl }) {
 
   const doWaitingItems = sortTasksBySince(
     buildDoWaitingItems(
-      await queryDoWaitingTasks(env, todayJstStr),
+      await queryDoWaitingTasks(env),
       todayStart
     ),
     "digestSinceISO"

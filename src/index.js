@@ -2,7 +2,12 @@ import { inboxList } from "./routes/inbox";
 import { fetchInbox } from "./notion/inbox";
 import { buildInboxMail } from "./mail/buildInboxMail";
 import { buildTasksDigestMail } from "./mail/buildTasksDigestMail";
-import { getTask, queryTasksByStatus, updateTaskStatus } from "./notion/tasks";
+import {
+  getTask,
+  queryDoWaitingTasks,
+  queryTasksByStatus,
+  updateTaskStatus
+} from "./notion/tasks";
 import { sanitizeSubject, readMessageBody } from "./email/parseEmail";
 import { createInboxItem } from "./notion/inboxCreate";
 
@@ -55,6 +60,18 @@ export default {
     if (url.pathname === "/api/tasks/do") {
       const items = await queryTasksByStatus(env, "Do");
       const sorted = sortTasksBySince(items, "sinceDoISO");
+      return jsonResponse({ count: sorted.length, items: sorted });
+    }
+
+    // =====================
+    // API: Tasks Do/Waiting JSON
+    // =====================
+    if (url.pathname === "/api/tasks/do-waiting") {
+      const todayStart = startOfJstDay(new Date());
+      const todayJstStr = getJstDateString(todayStart);
+      const items = await queryDoWaitingTasks(env, todayJstStr);
+      const doWaitingItems = buildDoWaitingItems(items, todayStart);
+      const sorted = sortTasksBySince(doWaitingItems, "digestSinceISO");
       return jsonResponse({ count: sorted.length, items: sorted });
     }
 
@@ -553,6 +570,50 @@ function parseJstDateStart(value) {
   return startOfJstDay(date);
 }
 
+function isWaitingReminderDue(item, todayStart) {
+  if (!item.reminderDateISO) return false;
+  const reminderStart = parseJstDateStart(item.reminderDateISO);
+  if (!reminderStart) return false;
+  return reminderStart.getTime() <= todayStart.getTime();
+}
+
+function isWaitingSinceDue(item, todayStart) {
+  if (item.reminderDateISO) return false;
+  const waitingStart = parseJstDateStart(item.waitingSinceISO);
+  if (!waitingStart) return false;
+  const elapsedDays = Math.floor(
+    (todayStart.getTime() - waitingStart.getTime()) / DAY_MS
+  );
+  return elapsedDays >= 3;
+}
+
+function buildDoWaitingItems(items, todayStart) {
+  return items
+    .filter((item) => {
+      if (item.status === "Do") return true;
+      if (item.status !== "Waiting") return false;
+      return isWaitingReminderDue(item, todayStart) || isWaitingSinceDue(item, todayStart);
+    })
+    .map((item) => {
+      if (item.status === "Waiting") {
+        const waitingSinceISO = item.waitingSinceISO || "";
+        const reminderDateISO = item.reminderDateISO || "";
+        const digestSinceISO = waitingSinceISO || reminderDateISO;
+        const digestSinceLabel = waitingSinceISO ? "Waiting since" : "Reminder";
+        return {
+          ...item,
+          digestSinceISO,
+          digestSinceLabel
+        };
+      }
+      return {
+        ...item,
+        digestSinceISO: item.sinceDoISO || "",
+        digestSinceLabel: "Since Do"
+      };
+    });
+}
+
 function sortTasksBySince(items, key) {
   return [...items].sort((a, b) => {
     const aDate = parseJstDateStart(a[key]);
@@ -619,9 +680,12 @@ async function buildTasksDigestData({ env, baseUrl }) {
   const holidays = await fetchHolidaysJson();
   const weekStart = isFirstBusinessDayOfWeek(todayStart, holidays);
 
-  const doItems = sortTasksBySince(
-    await queryTasksByStatus(env, "Do"),
-    "sinceDoISO"
+  const doWaitingItems = sortTasksBySince(
+    buildDoWaitingItems(
+      await queryDoWaitingTasks(env, todayJstStr),
+      todayStart
+    ),
+    "digestSinceISO"
   );
 
   const somedayItems = weekStart
@@ -629,11 +693,11 @@ async function buildTasksDigestData({ env, baseUrl }) {
     : [];
 
   const subject = weekStart
-    ? `Tasks｜Do ${doItems.length}件 / Someday ${somedayItems.length}件`
-    : `Tasks｜Do ${doItems.length}件`;
+    ? `Tasks｜Do/Waiting ${doWaitingItems.length}件 / Someday ${somedayItems.length}件`
+    : `Tasks｜Do/Waiting ${doWaitingItems.length}件`;
 
   const body = buildTasksDigestMail({
-    doItems,
+    doWaitingItems,
     somedayItems,
     baseUrl,
     weekStart,
@@ -644,7 +708,8 @@ async function buildTasksDigestData({ env, baseUrl }) {
     subject,
     body,
     week_start: weekStart,
-    count_do: doItems.length,
+    count_do: doWaitingItems.length,
+    count_do_waiting: doWaitingItems.length,
     count_someday: somedayItems.length,
     today_jst: todayJstStr
   };

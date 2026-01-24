@@ -60,7 +60,14 @@ function buildActionLinks({ baseUrl, id, status }) {
     .join("");
 }
 
-function buildSection({ title, items, sinceLabel, sinceKey, todayStart, baseUrl }) {
+function buildSection({
+  title,
+  items,
+  getSinceLabel,
+  getSinceValue,
+  todayStart,
+  baseUrl
+}) {
   if (items.length === 0) {
     return `
 <h3 style="margin-top:24px;">${title}</h3>
@@ -72,7 +79,8 @@ function buildSection({ title, items, sinceLabel, sinceKey, todayStart, baseUrl 
 <h3 style="margin-top:24px;">${title}（${items.length} 件）</h3>
 ${items
   .map((item, index) => {
-    const sinceValue = item[sinceKey];
+    const sinceValue = getSinceValue(item);
+    const sinceLabel = getSinceLabel(item);
     const elapsed = calcElapsedDays(todayStart, sinceValue);
     return `
 <div style="
@@ -97,7 +105,7 @@ ${items
 }
 
 export function buildTasksDigestMail({
-  doItems,
+  doWaitingItems,
   somedayItems,
   baseUrl,
   weekStart,
@@ -107,7 +115,7 @@ export function buildTasksDigestMail({
 
   const headerLines = [
     `今日: ${todayJstStr}`,
-    `Do: ${doItems.length} 件`
+    `Do/Waiting: ${doWaitingItems.length} 件`
   ];
 
   if (weekStart) {
@@ -128,10 +136,10 @@ export function buildTasksDigestMail({
   <h2 style="margin-top:0;">🗂 Tasks Digest</h2>
   <p style="color:#555;">${headerLines.join(" / ")}</p>
   ${buildSection({
-    title: "Do",
-    items: doItems,
-    sinceLabel: "Since Do",
-    sinceKey: "sinceDoISO",
+    title: "Do/Waiting",
+    items: doWaitingItems,
+    getSinceLabel: (item) => item.digestSinceLabel || "Since",
+    getSinceValue: (item) => item.digestSinceISO || "",
     todayStart,
     baseUrl
   })}
@@ -140,8 +148,8 @@ export function buildTasksDigestMail({
       ? buildSection({
           title: "Someday",
           items: somedayItems,
-          sinceLabel: "Since Someday",
-          sinceKey: "sinceSomedayISO",
+          getSinceLabel: () => "Since Someday",
+          getSinceValue: (item) => item.sinceSomedayISO || "",
           todayStart,
           baseUrl
         })

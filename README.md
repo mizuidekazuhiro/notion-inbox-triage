@@ -120,6 +120,64 @@ Cloudflare Workers の cron は UTC です。JST 7:00 は以下の通りです�
 2. Notion API トークンと DB ID を設定
 3. 各エンドポイントを用途に応じて呼び出す
 
+## Inbox → Tasks 移動（/action/move）
+### GET（従来互換）
+```
+GET /action/move?id=<inbox_page_id>&status=Do
+```
+
+### POST（ショートカット向け JSON）
+以下の JSON を受け付けます。`status` のみでも従来通り動作します。
+
+```json
+{
+  "inbox_page_id": "<page_id>",
+  "status": "Do",
+  "priority": "High",
+  "due_date": "2024-01-12",
+  "reminder_date": "2024-01-15"
+}
+```
+
+- `inbox_page_id`（必須）: Inbox のページ ID（従来の `id` も可）
+- `status`（必須）: `Do` / `Waiting` / `Someday` など
+- `priority`（任意）: Status=Do の場合のみ反映（未指定なら何もしない）
+- `due_date`（任意）: Status=Do の場合のみ反映（YYYY-MM-DD など）
+- `reminder_date`（任意）: Status=Waiting の場合のみ反映（YYYY-MM-DD など）
+
+日付は ISO 文字列や Date 文字列でも受け付け、JST 基準で `YYYY-MM-DD` に正規化して Notion に渡します。正規化できない場合は該当プロパティ更新をスキップします。
+
+### 動作確認例（/test/inbox/create を使用）
+1) Inbox を作成
+```bash
+curl -sS "<BASE_URL>/test/inbox/create?subject=ShortcutTest&body=Hello"
+```
+
+2) Status=Do + Priority + Due date
+```bash
+curl -sS -X POST "<BASE_URL>/action/move" \
+  -H "Content-Type: application/json" \
+  -H "X-Shortcut-Token: <SHORTCUT_TOKEN>" \
+  -d '{
+    "inbox_page_id": "<INBOX_PAGE_ID>",
+    "status": "Do",
+    "priority": "High",
+    "due_date": "2024-01-12"
+  }'
+```
+
+3) Status=Waiting + Reminder date
+```bash
+curl -sS -X POST "<BASE_URL>/action/move" \
+  -H "Content-Type: application/json" \
+  -H "X-Shortcut-Token: <SHORTCUT_TOKEN>" \
+  -d '{
+    "inbox_page_id": "<INBOX_PAGE_ID>",
+    "status": "Waiting",
+    "reminder_date": "2024-01-15"
+  }'
+```
+
 ## Email Routing → Notion Inbox 連携
 Cloudflare Email Routing で受信したメールを Notion の Inbox DB に「メール1通=1インボックスタスク」として登録します。
 

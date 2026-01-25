@@ -160,7 +160,7 @@ export default {
 
     // =====================
     // ③ Inbox → Tasks（ショートカット用：POST JSON）
-    // 受け取るJSON: { "id": "<pageId>", "status": "Do" }
+    // 受け取るJSON: { "inbox_page_id": "<pageId>", "status": "Do", ... }
     // ====================
     if (url.pathname === "/action/move") {
       // GET: /action/move?id=...&status=Do
@@ -249,8 +249,20 @@ async function handleMoveByBody(request, env) {
     return new Response("Invalid JSON body", { status: 400 });
   }
 
-  const pageId = typeof body?.id === "string" ? body.id.trim() : "";
+  const pageIdSource =
+    typeof body?.inbox_page_id === "string"
+      ? body.inbox_page_id
+      : typeof body?.id === "string"
+        ? body.id
+        : "";
+  const pageId = pageIdSource.trim();
   const status = normalizeStatus(typeof body?.status === "string" ? body.status : "");
+  const priority =
+    typeof body?.priority === "string" && body.priority.trim()
+      ? body.priority.trim()
+      : null;
+  const dueDate = normalizeJstDateString(body?.due_date ?? null);
+  const reminderDate = normalizeJstDateString(body?.reminder_date ?? null);
 
   const allowedStatus = ["Inbox", "Do", "Thinking", "Someday", "Waiting", "Done", "Drop"];
 
@@ -262,13 +274,27 @@ async function handleMoveByBody(request, env) {
     return new Response(`invalid status`, { status: 400 });
   }
 
-  return handleMoveCore({ env, pageId, status });
+  return handleMoveCore({
+    env,
+    pageId,
+    status,
+    priority,
+    dueDate,
+    reminderDate
+  });
 }
 
 // =====================
 // Move core
 // =====================
-async function handleMoveCore({ env, pageId, status }) {
+async function handleMoveCore({
+  env,
+  pageId,
+  status,
+  priority,
+  dueDate,
+  reminderDate
+}) {
 
   
   // =====================
@@ -322,20 +348,33 @@ async function handleMoveCore({ env, pageId, status }) {
   // =====================
   // Tasks 作成
   // =====================
+  const properties = {
+    名前: { title: [{ text: { content: title } }] },
+    Status: { select: { name: status } },
+    "Triage Source": { select: { name: "Shortcut" } },
+    "Triage At": { date: { start: now } },
+    "Inbox Page ID": {
+      rich_text: [{ text: { content: pageId } }]
+    }
+  };
+
+  if (status === "Do") {
+    if (priority) {
+      properties.Priority = { select: { name: priority } };
+    }
+    if (dueDate) {
+      properties["Due date"] = { date: { start: dueDate } };
+    }
+  } else if (status === "Waiting" && reminderDate) {
+    properties["Reminder Date"] = { date: { start: reminderDate } };
+  }
+
   const createRes = await fetch("https://api.notion.com/v1/pages", {
     method: "POST",
     headers: notionHeaders(env),
     body: JSON.stringify({
       parent: { database_id: env.TASKS_DB_ID },
-      properties: {
-        名前: { title: [{ text: { content: title } }] },
-        Status: { select: { name: status } },
-        "Triage Source": { select: { name: "Shortcut" } },
-        "Triage At": { date: { start: now } },
-        "Inbox Page ID": {
-          rich_text: [{ text: { content: pageId } }]
-        }
-      }
+      properties
     })
   });
 
@@ -568,6 +607,12 @@ function parseJstDateStart(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return startOfJstDay(date);
+}
+
+function normalizeJstDateString(value) {
+  const dateStart = parseJstDateStart(value);
+  if (!dateStart) return null;
+  return getJstDateString(dateStart);
 }
 
 function isWaitingReminderDue(item, todayStart) {

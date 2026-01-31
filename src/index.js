@@ -177,7 +177,7 @@ export default {
           return new Response("invalid status", { status: 400 });
         }
 
-        return handleMoveCore({ env, pageId, status });
+        return handleMoveCore({ env, pageId, status, baseUrl: url.origin });
       }
 
       // POST: JSON body {id, status}
@@ -188,6 +188,9 @@ export default {
     // Undo
     // =====================
     if (url.pathname === "/action/undo") {
+      return handleUndo(url, env);
+    }
+    if (url.pathname === "/undo") {
       return handleUndo(url, env);
     }
 
@@ -274,13 +277,16 @@ async function handleMoveByBody(request, env) {
     return new Response(`invalid status`, { status: 400 });
   }
 
+  const url = new URL(request.url);
+
   return handleMoveCore({
     env,
     pageId,
     status,
     priority,
     dueDate,
-    reminderDate
+    reminderDate,
+    baseUrl: url.origin
   });
 }
 
@@ -293,8 +299,10 @@ async function handleMoveCore({
   status,
   priority,
   dueDate,
-  reminderDate
+  reminderDate,
+  baseUrl
 }) {
+  const resolvedBaseUrl = baseUrl || env.BASE_URL || "";
 
   
   // =====================
@@ -385,6 +393,45 @@ async function handleMoveCore({
   const createdTask = await createRes.json();
   const createdTaskId = createdTask?.id;
 
+  let undoUrlWithSig = "";
+
+  if (createdTaskId && env.ACTION_SECRET && resolvedBaseUrl) {
+    const undoSig = await createUndoSignature(env.ACTION_SECRET, pageId, createdTaskId);
+    undoUrlWithSig = `${resolvedBaseUrl}/undo?inbox_page_id=${encodeURIComponent(
+      pageId
+    )}&task_id=${encodeURIComponent(createdTaskId)}&sig=${encodeURIComponent(undoSig)}`;
+    const undoProperty = buildUndoUrlProperty({
+      undoUrl: undoUrlWithSig,
+      propertyType: createdTask?.properties?.["Undo URL"]?.type
+    });
+
+    try {
+      const undoRes = await fetch(
+        `https://api.notion.com/v1/pages/${createdTaskId}`,
+        {
+          method: "PATCH",
+          headers: notionHeaders(env),
+          body: JSON.stringify({
+            properties: {
+              "Undo URL": undoProperty
+            }
+          })
+        }
+      );
+
+      if (!undoRes.ok) {
+        const text = await undoRes.text().catch(() => "");
+        console.error("Failed to update Undo URL", text);
+      }
+    } catch (error) {
+      console.error("Failed to update Undo URL", error?.stack || error);
+    }
+  } else if (createdTaskId && !env.ACTION_SECRET) {
+    console.error("Missing ACTION_SECRET; Undo URL not written");
+  } else if (createdTaskId && !resolvedBaseUrl) {
+    console.error("Missing baseUrl; Undo URL not written");
+  }
+
   // =====================
   // Inbox 更新
   // =====================
@@ -401,8 +448,9 @@ async function handleMoveCore({
     })
   });
 
-  const undoPath = createdTaskId ? `/action/undo?task_id=${createdTaskId}` : "";
-  const undoUrl = env.BASE_URL ? `${env.BASE_URL}${undoPath}` : undoPath;
+  const undoPath = createdTaskId ? `/undo?task_id=${createdTaskId}` : "";
+  const undoUrl =
+    undoUrlWithSig || (resolvedBaseUrl ? `${resolvedBaseUrl}${undoPath}` : undoPath);
   const undoLink = undoUrl
     ? `<a href="${undoUrl}" style="color:#1a73e8;">Undo</a>`
     : "Undo link unavailable";
@@ -437,23 +485,42 @@ async function handleMoveCore({
 // =====================
 async function handleUndo(url, env) {
   const taskId = url.searchParams.get("task_id");
+  const inboxPageIdParam = (url.searchParams.get("inbox_page_id") || "").trim();
+  const sig = (url.searchParams.get("sig") || "").trim();
   if (!taskId) {
     return new Response("task_id required", { status: 400 });
   }
 
-  const taskRes = await fetch(`https://api.notion.com/v1/pages/${taskId}`, {
-    headers: notionHeaders(env)
-  });
+  let inboxPageId = inboxPageIdParam;
 
-  if (!taskRes.ok) {
-    return new Response("Task not found", { status: 404 });
+  if (sig) {
+    if (!env.ACTION_SECRET) {
+      return new Response("Missing ACTION_SECRET", { status: 500 });
+    }
+    if (!inboxPageIdParam) {
+      return new Response("inbox_page_id required", { status: 400 });
+    }
+    const expected = await createUndoSignature(env.ACTION_SECRET, inboxPageIdParam, taskId);
+    if (!safeEqual(expected, sig)) {
+      return new Response("invalid signature", { status: 403 });
+    }
   }
 
-  const task = await taskRes.json();
-  const inboxPageId = task.properties["Inbox Page ID"]?.rich_text?.[0]?.plain_text;
-
   if (!inboxPageId) {
-    return new Response("Inbox Page ID not found", { status: 400 });
+    const taskRes = await fetch(`https://api.notion.com/v1/pages/${taskId}`, {
+      headers: notionHeaders(env)
+    });
+
+    if (!taskRes.ok) {
+      return new Response("Task not found", { status: 404 });
+    }
+
+    const task = await taskRes.json();
+    inboxPageId = task.properties["Inbox Page ID"]?.rich_text?.[0]?.plain_text;
+
+    if (!inboxPageId) {
+      return new Response("Inbox Page ID not found", { status: 400 });
+    }
   }
 
   await fetch(`https://api.notion.com/v1/pages/${inboxPageId}`, {
@@ -553,6 +620,13 @@ function buildRawText({ bodyText, from, msgId, receivedIso }) {
   ];
 
   return [bodyText?.trim() || "", "", ...metadataLines].join("\n");
+}
+
+function buildUndoUrlProperty({ undoUrl, propertyType }) {
+  if (propertyType === "rich_text") {
+    return { rich_text: [{ text: { content: undoUrl } }] };
+  }
+  return { url: undoUrl };
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -876,6 +950,20 @@ async function handleTaskUpdate(request, env) {
     "<html><body><p>更新しました。</p><script>window.close()</script></body></html>",
     { headers: { "Content-Type": "text/html; charset=UTF-8" } }
   );
+}
+
+async function createUndoSignature(secret, inboxPageId, taskId) {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const data = encoder.encode(`${inboxPageId}|${taskId}`);
+  const signature = await crypto.subtle.sign("HMAC", key, data);
+  return toHex(signature);
 }
 
 async function createActionSignature(secret, taskId, to, exp) {

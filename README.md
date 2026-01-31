@@ -24,6 +24,7 @@ Workers の HTTP エンドポイントを提供し、以下の用途を担いま
 - `/mail/content`：メール本文生成
 - `/action/move`：Inbox → Tasks 移動（GET/POST）
 - `/action/undo`：Undo
+- `/undo`：Undo（署名付き URL 用のエイリアス）
 - `/api/tasks/do`：Tasks の Do 一覧
 - `/api/tasks/someday`：Tasks の Someday 一覧
 - `/api/tasks/do-waiting`：Tasks の Do/Waiting 一覧
@@ -146,6 +147,11 @@ GET /action/move?id=<inbox_page_id>&status=Do
 - `reminder_date`（任意）: Status=Waiting の場合のみ反映（YYYY-MM-DD など）
 
 日付は ISO 文字列や Date 文字列でも受け付け、JST 基準で `YYYY-MM-DD` に正規化して Notion に渡します。正規化できない場合は該当プロパティ更新をスキップします。
+
+### 手動確認（Undo URL）
+1) Inbox のアイテムを `/action/move` で Tasks に移動する
+2) Tasks DB の "Undo URL" プロパティに URL が入っていることを確認する
+3) その URL にアクセスし、Undo 画面/Undo 実行に到達できることを確認する
 
 ### 動作確認例（/test/inbox/create を使用）
 1) Inbox を作成

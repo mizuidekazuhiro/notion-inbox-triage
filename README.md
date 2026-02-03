@@ -1,10 +1,10 @@
 # notion-inbox-triage
 
-Notion Inbox を取得し、HTML/JSONとして出力したり、Inbox から Tasks への移動を行う Cloudflare Workers 向けの API です。
+Notion Inbox を取得し、HTML/JSONとして出力したり、Inbox から Tasks への移動を行う Cloudflare Workers 向けの API です。既存のエンドポイント・レスポンス形式・ルーティングを維持しつつ、最小限の挙動変更で整理しています。
 
 ## できること
 - Notion Inbox の一覧取得（JSON）
-- iOSショートカット用の choices 取得
+- iOSショートカット用の choices 取得（Inbox / Projects）
 - Inbox を HTML で確認（ブラウザ用）
 - Inbox → Tasks への移動（GET/POST）
 - Undo（作成した Task をアーカイブし、Inbox 側を復旧）
@@ -20,6 +20,7 @@ Workers の HTTP エンドポイントを提供し、以下の用途を担いま
 - `/test/token`：環境変数のトークン確認
 - `/api/inbox`：Inbox の JSON 取得
 - `/api/inbox/shortcut`：ショートカット向けの choices 取得
+- `/api/projects/shortcut`：Projects DB の choices 取得
 - `/inbox`：Inbox HTML
 - `/mail/content`：メール本文生成
 - `/action/move`：Inbox → Tasks 移動（GET/POST）
@@ -48,13 +49,17 @@ Cron / scheduled 実行の入口です。`runDailyInboxMail` を呼び出しま�
 - `wrangler.toml`：Workers 設定
 
 ## 必要な環境変数（Workers）
+### 必須
 - `NOTION_TOKEN`
-- `TASKS_DB_ID`
 - `INBOX_DB_ID`
-- `BASE_URL`
-- `ACTION_SECRET`（Confirm 署名用の秘密鍵）
-- `SHORTCUT_TOKEN`（任意、ショートカット API の認証）
-- `INBOX_SOURCE_VALUE`（任意、未設定なら "Email"）
+- `TASKS_DB_ID`
+- `PROJECTS_DB_ID`（/api/projects/shortcut 用）
+- `ACTION_SECRET`（Confirm/Undo 署名用の秘密鍵）
+
+### 任意
+- `SHORTCUT_TOKEN`（ショートカット API の認証）
+- `BASE_URL`（未設定の場合はリクエスト URL を使用）
+- `INBOX_SOURCE_VALUE`（未設定なら "Email"）
 
 ## Tasks Digest の送信方法
 Workers は「本文生成」のみを担当し、送信は GitHub Actions から Gmail SMTP で行います。
@@ -136,6 +141,7 @@ GET /action/move?id=<inbox_page_id>&status=Do
   "status": "Do",
   "priority": "High",
   "due_date": "2024-01-12",
+  "project_id": "<PROJECT_PAGE_ID>",
   "reminder_date": "2024-01-15"
 }
 ```
@@ -144,6 +150,7 @@ GET /action/move?id=<inbox_page_id>&status=Do
 - `status`（必須）: `Do` / `Waiting` / `Someday` など
 - `priority`（任意）: Status=Do の場合のみ反映（未指定なら何もしない）
 - `due_date`（任意）: Status=Do の場合のみ反映（YYYY-MM-DD など）
+- `project_id`（任意）: Status=Do の場合のみ反映（Project relation の page.id）
 - `reminder_date`（任意）: Status=Waiting の場合のみ反映（YYYY-MM-DD など）
 
 日付は ISO 文字列や Date 文字列でも受け付け、JST 基準で `YYYY-MM-DD` に正規化して Notion に渡します。正規化できない場合は該当プロパティ更新をスキップします。
@@ -159,7 +166,7 @@ GET /action/move?id=<inbox_page_id>&status=Do
 curl -sS "<BASE_URL>/test/inbox/create?subject=ShortcutTest&body=Hello"
 ```
 
-2) Status=Do + Priority + Due date
+2) Status=Do + Priority + Due Date
 ```bash
 curl -sS -X POST "<BASE_URL>/action/move" \
   -H "Content-Type: application/json" \
@@ -168,7 +175,8 @@ curl -sS -X POST "<BASE_URL>/action/move" \
     "inbox_page_id": "<INBOX_PAGE_ID>",
     "status": "Do",
     "priority": "High",
-    "due_date": "2024-01-12"
+    "due_date": "2024-01-12",
+    "project_id": "<PROJECT_PAGE_ID>"
   }'
 ```
 
@@ -181,6 +189,74 @@ curl -sS -X POST "<BASE_URL>/action/move" \
     "inbox_page_id": "<INBOX_PAGE_ID>",
     "status": "Waiting",
     "reminder_date": "2024-01-15"
+  }'
+```
+
+## Notion 側の前提プロパティ名
+### Tasks DB
+- Status
+- Priority
+- Project（relation）
+- Due Date（date）
+- Processed
+- Processed At
+- Triage At
+- Triage Source
+- Inbox Page ID
+- Undo URL
+- Reminder Date
+- Waiting since
+- Since Do
+- Since Someday
+
+### Projects DB
+- 名前（title）
+
+## iOSショートカットから叩く POST 例
+### Do（Priority + Due Date + Project）
+```bash
+curl -sS -X POST "<BASE_URL>/action/move" \
+  -H "Content-Type: application/json" \
+  -H "X-Shortcut-Token: <SHORTCUT_TOKEN>" \
+  -d '{
+    "inbox_page_id": "<INBOX_PAGE_ID>",
+    "status": "Do",
+    "priority": "High",
+    "due_date": "2024-01-12",
+    "project_id": "<PROJECT_PAGE_ID>"
+  }'
+```
+
+### Waiting（Reminder Date）
+```bash
+curl -sS -X POST "<BASE_URL>/action/move" \
+  -H "Content-Type: application/json" \
+  -H "X-Shortcut-Token: <SHORTCUT_TOKEN>" \
+  -d '{
+    "inbox_page_id": "<INBOX_PAGE_ID>",
+    "status": "Waiting",
+    "reminder_date": "2024-01-15"
+  }'
+```
+
+## 手動テスト手順（簡易）
+```bash
+# Inbox choices（既存互換）
+curl -sS "<BASE_URL>/api/inbox/shortcut"
+
+# Projects choices（新規）
+curl -sS "<BASE_URL>/api/projects/shortcut"
+
+# Inbox -> Tasks（Do + Project）
+curl -sS -X POST "<BASE_URL>/action/move" \
+  -H "Content-Type: application/json" \
+  -H "X-Shortcut-Token: <SHORTCUT_TOKEN>" \
+  -d '{
+    \"inbox_page_id\": \"<INBOX_PAGE_ID>\",
+    \"status\": \"Do\",
+    \"priority\": \"High\",
+    \"due_date\": \"2024-01-12\",
+    \"project_id\": \"<PROJECT_PAGE_ID>\"
   }'
 ```
 

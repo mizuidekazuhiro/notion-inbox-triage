@@ -1,3 +1,14 @@
+import { fetchInbox } from "../notion/inbox";
+import { jsonResponse } from "../utils/http";
+import { buildDoWaitingItems, sortTasksBySince, startOfJstDay } from "../utils/tasksDigest";
+import { queryDoWaitingTasks, queryTasksByStatus } from "../notion/tasks";
+import { buildInboxMail } from "../mail/buildInboxMail";
+import { buildTasksDigestData } from "./tasksDigest";
+
+export async function handleInboxList(request, env) {
+  return inboxList(request, env);
+}
+
 export async function inboxList(request, env) {
   const url = new URL(request.url);
   const baseUrl = url.origin;
@@ -58,4 +69,81 @@ export async function inboxList(request, env) {
       }
     }
   );
+}
+
+export async function handleInboxShortcut(request, env) {
+  const inbox = await fetchInbox(env);
+
+  const choices = inbox.map((item) => ({
+    label: item.title || "Untitled",
+    value: item.id
+  }));
+
+  return new Response(JSON.stringify({ choices }), {
+    headers: {
+      "Content-Type": "application/json; charset=UTF-8",
+      "Cache-Control": "no-store"
+    }
+  });
+}
+
+export async function handleInboxHtml(request, env) {
+  const inbox = await fetchInbox(env);
+  const html = buildInboxMail(inbox, env.BASE_URL);
+
+  return new Response(html, {
+    headers: {
+      "Content-Type": "text/html; charset=UTF-8",
+      "Cache-Control": "no-store"
+    }
+  });
+}
+
+export async function handleMailContent(request, env) {
+  const inbox = await fetchInbox(env);
+  const body = buildInboxMail(inbox, env.BASE_URL);
+
+  return new Response(
+    JSON.stringify({
+      subject: `Inbox｜${inbox.length} 件`,
+      body,
+      count: inbox.length
+    }),
+    {
+      headers: {
+        "Content-Type": "application/json; charset=UTF-8",
+        "Cache-Control": "no-store"
+      }
+    }
+  );
+}
+
+export async function handleTasksDo(env) {
+  const items = await queryTasksByStatus(env, "Do");
+  const sorted = sortTasksBySince(items, "sinceDoISO");
+  return jsonResponse({ count: sorted.length, items: sorted });
+}
+
+export async function handleTasksSomeday(env) {
+  const items = await queryTasksByStatus(env, "Someday");
+  const sorted = sortTasksBySince(items, "sinceSomedayISO");
+  return jsonResponse({ count: sorted.length, items: sorted });
+}
+
+export async function handleTasksDoWaiting(env) {
+  const todayStart = startOfJstDay(new Date());
+  const items = await queryDoWaitingTasks(env);
+  const doWaitingItems = buildDoWaitingItems(items, todayStart);
+  const sorted = sortTasksBySince(doWaitingItems, "digestSinceISO");
+  return jsonResponse({ count: sorted.length, items: sorted });
+}
+
+export async function handleTasksDigestMail(request, env) {
+  const url = new URL(request.url);
+  const result = await buildTasksDigestData({
+    env,
+    baseUrl: env.BASE_URL || url.origin
+  });
+
+  return jsonResponse(result);
 }

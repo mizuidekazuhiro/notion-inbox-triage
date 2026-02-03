@@ -23,14 +23,26 @@ export async function handleProjectsShortcut(request, env) {
   }
 
   const data = await res.json();
-  const choices = (data.results ?? []).map((page) => ({
-    label: page.properties["名前"]?.title?.[0]?.plain_text ?? "Untitled",
-    value: page.id
-  }));
+  const choices = (data.results ?? [])
+    .map((page) => {
+      const titleProperty = Object.values(page.properties ?? {}).find(
+        (property) => property?.type === "title"
+      );
+      const titleText = (titleProperty?.title ?? [])
+        .map((item) => item?.plain_text)
+        .filter(Boolean)
+        .join("")
+        .trim();
+      return {
+        label: titleText || "Untitled",
+        value: page.id
+      };
+    })
+    .sort((a, b) => a.label.localeCompare(b.label));
 
   return new Response(JSON.stringify({ choices }), {
     headers: {
-      "Content-Type": "application/json; charset=UTF-8",
+      "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store"
     }
   });

@@ -1,13 +1,11 @@
+import { notionHeaders } from "./client";
+
 export async function fetchInbox(env) {
   const res = await fetch(
     `https://api.notion.com/v1/databases/${env.INBOX_DB_ID}/query`,
     {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${env.NOTION_TOKEN}`,
-        "Notion-Version": "2022-06-28",
-        "Content-Type": "application/json"
-      },
+      headers: notionHeaders(env),
       body: JSON.stringify({
       filter: {
         and: [

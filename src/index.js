@@ -1,23 +1,18 @@
-import { inboxList } from "./routes/inbox";
-import { fetchInbox } from "./notion/inbox";
-import { buildInboxMail } from "./mail/buildInboxMail";
-import { buildTasksDigestMail } from "./mail/buildTasksDigestMail";
-import {
-  getTask,
-  queryDoWaitingTasks,
-  queryTasksByStatus,
-  updateTaskStatus
-} from "./notion/tasks";
+import { runDailyInboxMail } from "./jobs/dailyInboxMail";
+import { runTasksDigestMail } from "./jobs/tasksDigestMail";
+import { handleInboxList, handleInboxShortcut, handleInboxHtml, handleMailContent, handleTasksDo, handleTasksDoWaiting, handleTasksSomeday, handleTasksDigestMail } from "./routes/inbox";
+import { handleMove } from "./routes/move";
+import { handleUndo } from "./routes/undo";
+import { handleConfirm, handleTaskUpdate } from "./routes/confirm";
+import { handleProjectsShortcut } from "./routes/projects";
 import { sanitizeSubject, readMessageBody } from "./email/parseEmail";
 import { createInboxItem } from "./notion/inboxCreate";
+import { jsonResponse } from "./utils/http";
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    // =====================
-    // ① トークン確認
-    // =====================
     if (url.pathname === "/test/token") {
       return Response.json({
         token_exists: !!env.NOTION_TOKEN,
@@ -26,116 +21,42 @@ export default {
       });
     }
 
-    // =====================
-    // API: Inbox JSON（Python用）
-    // =====================
     if (url.pathname === "/api/inbox") {
-      return inboxList(request, env);
+      return handleInboxList(request, env);
     }
 
-    // =====================
-    // API: Inbox choices（iOSショートカット用）
-    // 返す形式: { choices: [ { label, value }, ... ] }
-    // =====================
     if (url.pathname === "/api/inbox/shortcut") {
-      const inbox = await fetchInbox(env);
-
-      // ★最小修正：fetchInboxが未処理のみ返している前提なので、追加filterはしない
-      const choices = inbox.map((item) => ({
-        label: item.title || "Untitled",
-        value: item.id
-      }));
-
-      return new Response(JSON.stringify({ choices }), {
-        headers: {
-          "Content-Type": "application/json; charset=UTF-8",
-          "Cache-Control": "no-store"
-        }
-      });
+      return handleInboxShortcut(request, env);
     }
 
-    // =====================
-    // API: Tasks Do JSON
-    // =====================
+    if (url.pathname === "/api/projects/shortcut") {
+      return handleProjectsShortcut(request, env);
+    }
+
     if (url.pathname === "/api/tasks/do") {
-      const items = await queryTasksByStatus(env, "Do");
-      const sorted = sortTasksBySince(items, "sinceDoISO");
-      return jsonResponse({ count: sorted.length, items: sorted });
+      return handleTasksDo(env);
     }
 
-    // =====================
-    // API: Tasks Do/Waiting JSON
-    // =====================
     if (url.pathname === "/api/tasks/do-waiting") {
-      const todayStart = startOfJstDay(new Date());
-      const todayJstStr = getJstDateString(todayStart);
-      const items = await queryDoWaitingTasks(env);
-      const doWaitingItems = buildDoWaitingItems(items, todayStart);
-      const sorted = sortTasksBySince(doWaitingItems, "digestSinceISO");
-      return jsonResponse({ count: sorted.length, items: sorted });
+      return handleTasksDoWaiting(env);
     }
 
-    // =====================
-    // API: Tasks Someday JSON
-    // =====================
     if (url.pathname === "/api/tasks/someday") {
-      const items = await queryTasksByStatus(env, "Someday");
-      const sorted = sortTasksBySince(items, "sinceSomedayISO");
-      return jsonResponse({ count: sorted.length, items: sorted });
+      return handleTasksSomeday(env);
     }
-    
-    // =====================
-    // Inbox HTML（ブラウザ確認用）
-    // =====================
+
     if (url.pathname === "/inbox") {
-      const inbox = await fetchInbox(env);
-      const html = buildInboxMail(inbox, env.BASE_URL);
-
-      return new Response(html, {
-        headers: {
-          "Content-Type": "text/html; charset=UTF-8",
-          "Cache-Control": "no-store"
-        }
-      });
+      return handleInboxHtml(request, env);
     }
 
-    // =====================
-    // テスト用：mailto生成
-    // =====================
     if (url.pathname === "/mail/content") {
-      const inbox = await fetchInbox(env);
-      const body = buildInboxMail(inbox, env.BASE_URL);
-
-      return new Response(
-        JSON.stringify({
-          subject: `Inbox｜${inbox.length} 件`,
-          body,
-          count: inbox.length
-        }),
-        {
-          headers: {
-            "Content-Type": "application/json; charset=UTF-8",
-            "Cache-Control": "no-store"
-          }
-        }
-      );
+      return handleMailContent(request, env);
     }
 
-    // =====================
-    // Tasks Digest Mail (JSON)
-    // =====================
     if (url.pathname === "/mail/digest") {
-      const result = await buildTasksDigestData({
-        env,
-        baseUrl: env.BASE_URL || url.origin
-      });
-
-      return jsonResponse(result);
+      return handleTasksDigestMail(request, env);
     }
 
-    // =====================
-    // Test: create inbox item (email-style)
-    // =====================
     if (url.pathname === "/test/email-to-inbox") {
       const subject = sanitizeSubject(url.searchParams.get("subject"));
       const body = url.searchParams.get("body") || "";
@@ -146,9 +67,6 @@ export default {
       return new Response("Failed to create inbox item", { status: 500 });
     }
 
-    // =====================
-    // Test: create inbox item from query params
-    // =====================
     if (url.pathname === "/test/inbox/create") {
       const subject = sanitizeSubject(url.searchParams.get("subject"));
       const body = url.searchParams.get("body") || "";
@@ -158,52 +76,18 @@ export default {
       return jsonResponse({ ok: true });
     }
 
-    // =====================
-    // ③ Inbox → Tasks（ショートカット用：POST JSON）
-    // 受け取るJSON: { "inbox_page_id": "<pageId>", "status": "Do", ... }
-    // ====================
     if (url.pathname === "/action/move") {
-      // GET: /action/move?id=...&status=Do
-      if (request.method === "GET") {
-        const pageId = (url.searchParams.get("id") || "").trim();
-        const status = normalizeStatus(url.searchParams.get("status") || "");
-
-        const allowedStatus = ["Inbox", "Do", "Thinking", "Someday", "Waiting", "Done", "Drop"];
-
-        if (!pageId || !status) {
-          return new Response("id and status are required", { status: 400 });
-        }
-        if (!allowedStatus.includes(status)) {
-          return new Response("invalid status", { status: 400 });
-        }
-
-        return handleMoveCore({ env, pageId, status, baseUrl: url.origin });
-      }
-
-      // POST: JSON body {id, status}
-      return handleMoveByBody(request, env);
+      return handleMove(request, env);
     }
 
-    // =====================
-    // Undo
-    // =====================
-    if (url.pathname === "/action/undo") {
-      return handleUndo(url, env);
-    }
-    if (url.pathname === "/undo") {
+    if (url.pathname === "/action/undo" || url.pathname === "/undo") {
       return handleUndo(url, env);
     }
 
-    // =====================
-    // Confirm screen
-    // =====================
     if (url.pathname === "/confirm") {
       return handleConfirm(url, env);
     }
 
-    // =====================
-    // Action: update task status (POST only)
-    // =====================
     if (url.pathname === "/action/task/update") {
       if (request.method !== "POST") {
         return new Response("Method Not Allowed", { status: 405 });
@@ -227,357 +111,6 @@ export default {
     return;
   }
 };
-
-// =====================
-// Move handler (POST JSON body)
-// =====================
-async function handleMoveByBody(request, env) {
-  // Optional: shared secret for shortcuts
-  // SHORTCUT_TOKEN を env に入れた場合だけチェック
-  if (env.SHORTCUT_TOKEN) {
-    const token = request.headers.get("X-Shortcut-Token");
-    if (token !== env.SHORTCUT_TOKEN) {
-      return new Response("Forbidden", { status: 403 });
-    }
-  }
-
-  if (request.method !== "POST") {
-    return new Response("Method Not Allowed", { status: 405 });
-  }
-
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    return new Response("Invalid JSON body", { status: 400 });
-  }
-
-  const pageIdSource =
-    typeof body?.inbox_page_id === "string"
-      ? body.inbox_page_id
-      : typeof body?.id === "string"
-        ? body.id
-        : "";
-  const pageId = pageIdSource.trim();
-  const status = normalizeStatus(typeof body?.status === "string" ? body.status : "");
-  const priority =
-    typeof body?.priority === "string" && body.priority.trim()
-      ? body.priority.trim()
-      : null;
-  const dueDate = normalizeJstDateString(body?.due_date ?? null);
-  const reminderDate = normalizeJstDateString(body?.reminder_date ?? null);
-
-  const allowedStatus = ["Inbox", "Do", "Thinking", "Someday", "Waiting", "Done", "Drop"];
-
-  if (!pageId || !status) {
-    return new Response("id and status are required", { status: 400 });
-  }
-
-  if (!allowedStatus.includes(status)) {
-    return new Response(`invalid status`, { status: 400 });
-  }
-
-  const url = new URL(request.url);
-
-  return handleMoveCore({
-    env,
-    pageId,
-    status,
-    priority,
-    dueDate,
-    reminderDate,
-    baseUrl: url.origin
-  });
-}
-
-// =====================
-// Move core
-// =====================
-async function handleMoveCore({
-  env,
-  pageId,
-  status,
-  priority,
-  dueDate,
-  reminderDate,
-  baseUrl
-}) {
-  const resolvedBaseUrl = baseUrl || env.BASE_URL || "";
-
-  
-  // =====================
-  // Inbox ページ取得
-  // =====================
-  const pageRes = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
-    headers: notionHeaders(env)
-  });
-
-  // ★最小修正：okチェックを先に（json()例外→1101対策）
-  if (!pageRes.ok) {
-    const text = await pageRes.text().catch(() => "");
-    return new Response(`Failed to fetch inbox page: ${text}`, { status: 500 });
-  }
-
-  const page = await pageRes.json();
-
-  // =====================
-  // すでに処理済みなら何もしない
-  // =====================
-  const processedText =
-  page.properties["Processed"]?.rich_text?.[0]?.plain_text?.trim() || "";
-
-  const processedAt =
-    page.properties["Processed At"]?.date?.start || "";
-  
-  if (processedText || processedAt) {
-    return new Response("Already processed", { status: 200 });
-  }
-  
-  // ★最小修正：now を復活（未定義→1101対策）
-  const now = new Date().toISOString();
-
-  // =====================
-  // 即ロック（軽い二重実行対策）
-  // =====================
-  await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
-    method: "PATCH",
-    headers: notionHeaders(env),
-    body: JSON.stringify({
-      properties: {
-        Processed: {
-          rich_text: [{ text: { content: "processing..." } }]
-        }
-      }
-    })
-  });
-
-  const title = page.properties.Name?.title?.[0]?.text?.content ?? "Untitled";
-
-  // =====================
-  // Tasks 作成
-  // =====================
-  const properties = {
-    名前: { title: [{ text: { content: title } }] },
-    Status: { select: { name: status } },
-    "Triage Source": { select: { name: "Shortcut" } },
-    "Triage At": { date: { start: now } },
-    "Inbox Page ID": {
-      rich_text: [{ text: { content: pageId } }]
-    }
-  };
-
-  if (status === "Do") {
-    if (priority) {
-      properties.Priority = { select: { name: priority } };
-    }
-    if (dueDate) {
-      properties["Due date"] = { date: { start: dueDate } };
-    }
-  } else if (status === "Waiting" && reminderDate) {
-    properties["Reminder Date"] = { date: { start: reminderDate } };
-  }
-
-  const createRes = await fetch("https://api.notion.com/v1/pages", {
-    method: "POST",
-    headers: notionHeaders(env),
-    body: JSON.stringify({
-      parent: { database_id: env.TASKS_DB_ID },
-      properties
-    })
-  });
-
-  if (!createRes.ok) {
-    return new Response("Failed to create task", { status: 500 });
-  }
-
-  const createdTask = await createRes.json();
-  const createdTaskId = createdTask?.id;
-
-  let undoUrlWithSig = "";
-
-  if (createdTaskId && env.ACTION_SECRET && resolvedBaseUrl) {
-    const undoSig = await createUndoSignature(env.ACTION_SECRET, pageId, createdTaskId);
-    undoUrlWithSig = `${resolvedBaseUrl}/undo?inbox_page_id=${encodeURIComponent(
-      pageId
-    )}&task_id=${encodeURIComponent(createdTaskId)}&sig=${encodeURIComponent(undoSig)}`;
-    const undoProperty = buildUndoUrlProperty({
-      undoUrl: undoUrlWithSig,
-      propertyType: createdTask?.properties?.["Undo URL"]?.type
-    });
-
-    try {
-      const undoRes = await fetch(
-        `https://api.notion.com/v1/pages/${createdTaskId}`,
-        {
-          method: "PATCH",
-          headers: notionHeaders(env),
-          body: JSON.stringify({
-            properties: {
-              "Undo URL": undoProperty
-            }
-          })
-        }
-      );
-
-      if (!undoRes.ok) {
-        const text = await undoRes.text().catch(() => "");
-        console.error("Failed to update Undo URL", text);
-      }
-    } catch (error) {
-      console.error("Failed to update Undo URL", error?.stack || error);
-    }
-  } else if (createdTaskId && !env.ACTION_SECRET) {
-    console.error("Missing ACTION_SECRET; Undo URL not written");
-  } else if (createdTaskId && !resolvedBaseUrl) {
-    console.error("Missing baseUrl; Undo URL not written");
-  }
-
-  // =====================
-  // Inbox 更新
-  // =====================
-  await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
-    method: "PATCH",
-    headers: notionHeaders(env),
-    body: JSON.stringify({
-      properties: {
-        Processed: {
-          rich_text: [{ text: { content: `Moved to ${status}` } }]
-        },
-        "Processed At": { date: { start: now } }
-      }
-    })
-  });
-
-  const undoPath = createdTaskId ? `/undo?task_id=${createdTaskId}` : "";
-  const undoUrl =
-    undoUrlWithSig || (resolvedBaseUrl ? `${resolvedBaseUrl}${undoPath}` : undoPath);
-  const undoLink = undoUrl
-    ? `<a href="${undoUrl}" style="color:#1a73e8;">Undo</a>`
-    : "Undo link unavailable";
-
-  const html = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-</head>
-<body style="
-  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-  background:#f7f7f7;
-  padding:16px;
-">
-  <div style="background:#fff; border-radius:12px; padding:16px;">
-    <p style="margin:0 0 12px 0;">Moved to ${status}</p>
-    <p style="margin:0;">${undoLink}</p>
-  </div>
-</body>
-</html>
-`;
-
-  return new Response(html, {
-    status: 200,
-    headers: { "Content-Type": "text/html; charset=UTF-8" }
-  });
-}
-
-// =====================
-// Undo handler
-// =====================
-async function handleUndo(url, env) {
-  const taskId = url.searchParams.get("task_id");
-  const inboxPageIdParam = (url.searchParams.get("inbox_page_id") || "").trim();
-  const sig = (url.searchParams.get("sig") || "").trim();
-  if (!taskId) {
-    return new Response("task_id required", { status: 400 });
-  }
-
-  let inboxPageId = inboxPageIdParam;
-
-  if (sig) {
-    if (!env.ACTION_SECRET) {
-      return new Response("Missing ACTION_SECRET", { status: 500 });
-    }
-    if (!inboxPageIdParam) {
-      return new Response("inbox_page_id required", { status: 400 });
-    }
-    const expected = await createUndoSignature(env.ACTION_SECRET, inboxPageIdParam, taskId);
-    if (!safeEqual(expected, sig)) {
-      return new Response("invalid signature", { status: 403 });
-    }
-  }
-
-  if (!inboxPageId) {
-    const taskRes = await fetch(`https://api.notion.com/v1/pages/${taskId}`, {
-      headers: notionHeaders(env)
-    });
-
-    if (!taskRes.ok) {
-      return new Response("Task not found", { status: 404 });
-    }
-
-    const task = await taskRes.json();
-    inboxPageId = task.properties["Inbox Page ID"]?.rich_text?.[0]?.plain_text;
-
-    if (!inboxPageId) {
-      return new Response("Inbox Page ID not found", { status: 400 });
-    }
-  }
-
-  await fetch(`https://api.notion.com/v1/pages/${inboxPageId}`, {
-    method: "PATCH",
-    headers: notionHeaders(env),
-    body: JSON.stringify({
-      properties: {
-        Processed: { rich_text: [] },
-        "Processed At": { date: null }
-      }
-    })
-  });
-
-  await fetch(`https://api.notion.com/v1/pages/${taskId}`, {
-    method: "PATCH",
-    headers: notionHeaders(env),
-    body: JSON.stringify({ archived: true })
-  });
-
-  return new Response(`<html><body><script>window.close()</script></body></html>`, {
-    headers: { "Content-Type": "text/html; charset=UTF-8" }
-  });
-}
-
-// =====================
-// Helpers
-// =====================
-function notionHeaders(env) {
-  return {
-    Authorization: `Bearer ${env.NOTION_TOKEN}`,
-    "Notion-Version": "2022-06-28",
-    "Content-Type": "application/json"
-  };
-}
-
-function normalizeStatus(s) {
-  const x = (s || "").trim().toLowerCase();
-  if (x === "do") return "Do";
-  if (x === "thinking") return "Thinking";
-  if (x === "done") return "Done";
-  if (x === "waiting") return "Waiting";
-  if (x === "someday") return "Someday";
-  if (x === "drop") return "Drop";
-  if (x === "inbox") return "Inbox";
-  if (
-    s === "Do" ||
-    s === "Thinking" ||
-    s === "Done" ||
-    s === "Waiting" ||
-    s === "Someday" ||
-    s === "Drop" ||
-    s === "Inbox"
-  ) {
-    return s;
-  }
-  return s;
-}
 
 async function processInboundEmail(message, env) {
   try {
@@ -620,378 +153,4 @@ function buildRawText({ bodyText, from, msgId, receivedIso }) {
   ];
 
   return [bodyText?.trim() || "", "", ...metadataLines].join("\n");
-}
-
-function buildUndoUrlProperty({ undoUrl, propertyType }) {
-  if (propertyType === "rich_text") {
-    return { rich_text: [{ text: { content: undoUrl } }] };
-  }
-  return { url: undoUrl };
-}
-
-const DAY_MS = 24 * 60 * 60 * 1000;
-const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
-const ALLOWED_ACTION_STATUS = ["Do", "Thinking", "Waiting", "Done", "Drop", "Someday"];
-
-function jsonResponse(payload, status = 200) {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: {
-      "Content-Type": "application/json; charset=UTF-8",
-      "Cache-Control": "no-store"
-    }
-  });
-}
-
-function toJstDate(date) {
-  return new Date(date.getTime() + JST_OFFSET_MS);
-}
-
-function startOfJstDay(date) {
-  const jst = toJstDate(date);
-  const year = jst.getUTCFullYear();
-  const month = jst.getUTCMonth();
-  const day = jst.getUTCDate();
-  return new Date(Date.UTC(year, month, day) - JST_OFFSET_MS);
-}
-
-function getJstDateParts(date) {
-  const jst = toJstDate(date);
-  return {
-    year: jst.getUTCFullYear(),
-    month: jst.getUTCMonth(),
-    day: jst.getUTCDate(),
-    dayOfWeek: jst.getUTCDay()
-  };
-}
-
-function getJstDateString(date) {
-  const { year, month, day } = getJstDateParts(date);
-  const mm = String(month + 1).padStart(2, "0");
-  const dd = String(day).padStart(2, "0");
-  return `${year}-${mm}-${dd}`;
-}
-
-function parseJstDateStart(value) {
-  if (!value) return null;
-  if (typeof value === "string" && /^\\d{4}-\\d{2}-\\d{2}$/.test(value)) {
-    const [year, month, day] = value.split("-").map(Number);
-    return new Date(Date.UTC(year, month - 1, day) - JST_OFFSET_MS);
-  }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return startOfJstDay(date);
-}
-
-function normalizeJstDateString(value) {
-  const dateStart = parseJstDateStart(value);
-  if (!dateStart) return null;
-  return getJstDateString(dateStart);
-}
-
-function isWaitingReminderDue(item, todayStart) {
-  if (!item.reminderDateISO) return false;
-  const reminderStart = parseJstDateStart(item.reminderDateISO);
-  if (!reminderStart) return false;
-  return reminderStart.getTime() <= todayStart.getTime();
-}
-
-function isWaitingSinceDue(item, todayStart) {
-  if (item.reminderDateISO) return false;
-  const waitingStart = parseJstDateStart(item.waitingSinceISO);
-  if (!waitingStart) return false;
-  const elapsedDays = Math.floor(
-    (todayStart.getTime() - waitingStart.getTime()) / DAY_MS
-  );
-  return elapsedDays >= 3;
-}
-
-function buildDoWaitingItems(items, todayStart) {
-  return items
-    .filter((item) => {
-      if (item.status === "Do") return true;
-      if (item.status !== "Waiting") return false;
-      return isWaitingReminderDue(item, todayStart) || isWaitingSinceDue(item, todayStart);
-    })
-    .map((item) => {
-      if (item.status === "Waiting") {
-        const waitingSinceISO = item.waitingSinceISO || "";
-        const reminderDateISO = item.reminderDateISO || "";
-        const digestSinceISO = waitingSinceISO || reminderDateISO;
-        const digestSinceLabel = waitingSinceISO ? "Waiting since" : "Reminder";
-        return {
-          ...item,
-          digestSinceISO,
-          digestSinceLabel
-        };
-      }
-      return {
-        ...item,
-        digestSinceISO: item.sinceDoISO || "",
-        digestSinceLabel: "Since Do"
-      };
-    });
-}
-
-function sortTasksBySince(items, key) {
-  return [...items].sort((a, b) => {
-    const aDate = parseJstDateStart(a[key]);
-    const bDate = parseJstDateStart(b[key]);
-    if (!aDate && !bDate) return 0;
-    if (!aDate) return 1;
-    if (!bDate) return -1;
-    return aDate.getTime() - bDate.getTime();
-  });
-}
-
-async function fetchHolidaysJson() {
-  const cache = caches.default;
-  const cacheKey = new Request("https://holidays-jp.github.io/api/v1/date.json");
-  const cached = await cache.match(cacheKey);
-  if (cached) {
-    return cached.json();
-  }
-
-  const res = await fetch(cacheKey, {
-    headers: {
-      "Cache-Control": "max-age=86400"
-    }
-  });
-
-  if (!res.ok) {
-    return {};
-  }
-
-  await cache.put(cacheKey, res.clone());
-  return res.json();
-}
-
-function isBusinessDay(date, holidays) {
-  const { dayOfWeek } = getJstDateParts(date);
-  if (dayOfWeek === 0 || dayOfWeek === 6) {
-    return false;
-  }
-  const dateStr = getJstDateString(date);
-  return !holidays[dateStr];
-}
-
-function isFirstBusinessDayOfWeek(todayStart, holidays) {
-  const { dayOfWeek } = getJstDateParts(todayStart);
-  const offset = (dayOfWeek + 6) % 7;
-  const mondayStart = new Date(todayStart.getTime() - offset * DAY_MS);
-
-  for (
-    let cursor = mondayStart.getTime();
-    cursor <= todayStart.getTime();
-    cursor += DAY_MS
-  ) {
-    const date = new Date(cursor);
-    if (isBusinessDay(date, holidays)) {
-      return date.getTime() === todayStart.getTime();
-    }
-  }
-  return false;
-}
-
-async function buildTasksDigestData({ env, baseUrl }) {
-  const todayStart = startOfJstDay(new Date());
-  const todayJstStr = getJstDateString(todayStart);
-  const holidays = await fetchHolidaysJson();
-  const weekStart = isFirstBusinessDayOfWeek(todayStart, holidays);
-
-  const doWaitingItems = sortTasksBySince(
-    buildDoWaitingItems(
-      await queryDoWaitingTasks(env),
-      todayStart
-    ),
-    "digestSinceISO"
-  );
-
-  const somedayItems = weekStart
-    ? sortTasksBySince(await queryTasksByStatus(env, "Someday"), "sinceSomedayISO")
-    : [];
-
-  const subject = weekStart
-    ? `Tasks｜Do/Waiting ${doWaitingItems.length}件 / Someday ${somedayItems.length}件`
-    : `Tasks｜Do/Waiting ${doWaitingItems.length}件`;
-
-  const body = buildTasksDigestMail({
-    doWaitingItems,
-    somedayItems,
-    baseUrl,
-    weekStart,
-    todayJstStr
-  });
-
-  return {
-    subject,
-    body,
-    week_start: weekStart,
-    count_do: doWaitingItems.length,
-    count_do_waiting: doWaitingItems.length,
-    count_someday: somedayItems.length,
-    today_jst: todayJstStr
-  };
-}
-
-async function runTasksDigestMail(env) {
-  const result = await buildTasksDigestData({
-    env,
-    baseUrl: env.BASE_URL
-  });
-
-  return { ...result, sent: false };
-}
-
-async function handleConfirm(url, env) {
-  if (!env.ACTION_SECRET) {
-    return new Response("Missing ACTION_SECRET", { status: 500 });
-  }
-
-  const taskId = (url.searchParams.get("task_id") || "").trim();
-  const to = (url.searchParams.get("to") || "").trim();
-
-  if (!taskId || !to) {
-    return new Response("task_id and to are required", { status: 400 });
-  }
-  if (!ALLOWED_ACTION_STATUS.includes(to)) {
-    return new Response("invalid status", { status: 400 });
-  }
-
-  let task;
-  try {
-    task = await getTask(env, taskId);
-  } catch (error) {
-    return new Response(error?.message || "Failed to fetch task", { status: 500 });
-  }
-
-  const taskName = task.properties["名前"]?.title?.[0]?.plain_text ?? "Untitled";
-  const currentStatus = task.properties.Status?.select?.name ?? "-";
-  const exp = String(Date.now() + 10 * 60 * 1000);
-  const sig = await createActionSignature(env.ACTION_SECRET, taskId, to, exp);
-
-  const html = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-</head>
-<body style="
-  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-  background:#f7f7f7;
-  padding:16px;
-">
-  <div style="background:#fff; border-radius:12px; padding:16px;">
-    <h2 style="margin-top:0;">更新確認</h2>
-    <p style="margin:0 0 8px 0;"><strong>${taskName}</strong></p>
-    <p style="color:#555; margin:0 0 16px 0;">現在: ${currentStatus} → 変更先: ${to}</p>
-    <form method="POST" action="/action/task/update">
-      <input type="hidden" name="task_id" value="${taskId}">
-      <input type="hidden" name="to" value="${to}">
-      <input type="hidden" name="exp" value="${exp}">
-      <input type="hidden" name="sig" value="${sig}">
-      <button type="submit" style="
-        padding: 12px 20px;
-        background:#1a73e8;
-        border:none;
-        color:#fff;
-        border-radius:8px;
-        font-size:16px;
-      ">Confirm</button>
-    </form>
-  </div>
-</body>
-</html>
-`;
-
-  return new Response(html, {
-    headers: {
-      "Content-Type": "text/html; charset=UTF-8",
-      "Cache-Control": "no-store"
-    }
-  });
-}
-
-async function handleTaskUpdate(request, env) {
-  if (!env.ACTION_SECRET) {
-    return new Response("Missing ACTION_SECRET", { status: 500 });
-  }
-
-  const form = await request.formData();
-  const taskId = String(form.get("task_id") || "").trim();
-  const to = String(form.get("to") || "").trim();
-  const exp = String(form.get("exp") || "").trim();
-  const sig = String(form.get("sig") || "").trim();
-
-  if (!taskId || !to || !exp || !sig) {
-    return new Response("invalid payload", { status: 400 });
-  }
-  if (!ALLOWED_ACTION_STATUS.includes(to)) {
-    return new Response("invalid status", { status: 400 });
-  }
-
-  const expNum = Number(exp);
-  if (!Number.isFinite(expNum) || Date.now() > expNum) {
-    return new Response("signature expired", { status: 403 });
-  }
-
-  const expected = await createActionSignature(env.ACTION_SECRET, taskId, to, exp);
-  if (!safeEqual(expected, sig)) {
-    return new Response("invalid signature", { status: 403 });
-  }
-
-  try {
-    await updateTaskStatus(env, taskId, to);
-  } catch (error) {
-    return new Response(error?.message || "Failed to update task", { status: 500 });
-  }
-
-  return new Response(
-    "<html><body><p>更新しました。</p><script>window.close()</script></body></html>",
-    { headers: { "Content-Type": "text/html; charset=UTF-8" } }
-  );
-}
-
-async function createUndoSignature(secret, inboxPageId, taskId) {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  const data = encoder.encode(`${inboxPageId}|${taskId}`);
-  const signature = await crypto.subtle.sign("HMAC", key, data);
-  return toHex(signature);
-}
-
-async function createActionSignature(secret, taskId, to, exp) {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  const data = encoder.encode(`${taskId}|${to}|${exp}`);
-  const signature = await crypto.subtle.sign("HMAC", key, data);
-  return toHex(signature);
-}
-
-function toHex(buffer) {
-  const bytes = new Uint8Array(buffer);
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-function safeEqual(a, b) {
-  if (a.length !== b.length) return false;
-  let result = 0;
-  for (let i = 0; i < a.length; i += 1) {
-    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return result === 0;
 }

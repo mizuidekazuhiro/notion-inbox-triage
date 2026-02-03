@@ -49,6 +49,18 @@ async function handleMoveByBody(request, env) {
   } catch {
     return new Response("Invalid JSON body", { status: 400 });
   }
+  if (
+    body &&
+    typeof body === "object" &&
+    !Array.isArray(body) &&
+    Object.keys(body).length === 1 &&
+    Object.keys(body)[0] === "" &&
+    body[""] &&
+    typeof body[""] === "object" &&
+    !Array.isArray(body[""])
+  ) {
+    body = body[""];
+  }
 
   const isDebug = request.headers.get("X-Debug") === "1";
   const debugHeaders = isDebug ? buildDebugHeaders(request.headers) : null;

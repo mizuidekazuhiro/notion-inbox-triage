@@ -11,4 +11,5 @@ MAIL_TO = "you@example.com"
 BASE_URL = "https://notion-inbox-triage.kazuhiro-mizuide.workers.dev"
 
 [triggers]
+## 07:00 JST = 22:00 UTC (previous day)
 crons = ["0 22 * * *"]

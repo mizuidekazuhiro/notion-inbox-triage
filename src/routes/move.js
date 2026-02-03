@@ -3,6 +3,13 @@ import { normalizeJstDateString } from "../utils/date";
 import { createUndoSignature } from "../utils/signature";
 
 const ALLOWED_STATUS = ["Inbox", "Do", "Thinking", "Someday", "Waiting", "Done", "Drop"];
+const DEBUG_HEADER_ALLOWLIST = [
+  "content-type",
+  "accept",
+  "user-agent",
+  "x-debug",
+  "x-shortcut-token"
+];
 
 export async function handleMove(request, env) {
   const url = new URL(request.url);
@@ -43,14 +50,13 @@ async function handleMoveByBody(request, env) {
     return new Response("Invalid JSON body", { status: 400 });
   }
 
-  const pageIdSource =
-    typeof body?.inbox_page_id === "string"
-      ? body.inbox_page_id
-      : typeof body?.id === "string"
-        ? body.id
-        : "";
+  const isDebug = request.headers.get("X-Debug") === "1";
+  const debugHeaders = isDebug ? buildDebugHeaders(request.headers) : null;
+
+  const pageIdSource = coerceString(body?.inbox_page_id) || coerceString(body?.id);
   const pageId = pageIdSource.trim();
-  const status = normalizeStatus(typeof body?.status === "string" ? body.status : "");
+  const statusRaw = coerceString(body?.status).trim();
+  const status = normalizeStatus(statusRaw);
   const priority =
     typeof body?.priority === "string" && body.priority.trim()
       ? body.priority.trim()
@@ -63,6 +69,29 @@ async function handleMoveByBody(request, env) {
       : null;
 
   if (!pageId || !status) {
+    if (isDebug) {
+      return new Response(
+        JSON.stringify(
+          {
+            error: "id and status are required",
+            got: {
+              id: body?.id ?? null,
+              inbox_page_id: body?.inbox_page_id ?? null,
+              status: body?.status ?? null
+            },
+            keys: Object.keys(body || {}),
+            body,
+            headers: debugHeaders
+          },
+          null,
+          2
+        ),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json; charset=utf-8" }
+        }
+      );
+    }
     return new Response("id and status are required", { status: 400 });
   }
 
@@ -80,7 +109,8 @@ async function handleMoveByBody(request, env) {
     dueDate,
     reminderDate,
     projectId,
-    baseUrl: url.origin
+    baseUrl: url.origin,
+    debug: isDebug ? { body, headers: debugHeaders } : null
   });
 }
 
@@ -92,7 +122,8 @@ export async function handleMoveCore({
   dueDate,
   reminderDate,
   projectId,
-  baseUrl
+  baseUrl,
+  debug
 }) {
   const resolvedBaseUrl = baseUrl || env.BASE_URL || "";
 
@@ -250,6 +281,28 @@ export async function handleMoveCore({
 </html>
 `;
 
+  if (debug) {
+    return new Response(
+      JSON.stringify(
+        {
+          ok: true,
+          moved_to: status,
+          inbox_page_id: pageId,
+          created_task_id: createdTaskId ?? null,
+          undo_url: undoUrlWithSig || undoUrl,
+          body: debug.body,
+          headers: debug.headers
+        },
+        null,
+        2
+      ),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json; charset=utf-8" }
+      }
+    );
+  }
+
   return new Response(html, {
     status: 200,
     headers: { "Content-Type": "text/html; charset=UTF-8" }
@@ -288,4 +341,30 @@ function normalizeStatus(s) {
 
 export function normalizeMoveStatus(value) {
   return normalizeStatus(value);
+}
+
+function coerceString(value) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (typeof value === "object") {
+    if (typeof value.value === "string") return value.value;
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
+
+function buildDebugHeaders(headers) {
+  const output = {};
+  for (const name of DEBUG_HEADER_ALLOWLIST) {
+    const value = headers.get(name);
+    if (value !== null) {
+      output[name] = name === "x-shortcut-token" ? "***" : value;
+    }
+  }
+  return output;
 }

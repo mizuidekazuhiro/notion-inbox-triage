@@ -104,8 +104,8 @@ Workers は「本文生成」のみを担当し、送信は GitHub Actions か�
 - `DIGEST_URL`：Workers の `/mail/digest` URL（例: `https://<worker-domain>/mail/digest`）
 
 ### 3. Actions で送信
-`.github/workflows/send_tasks_digest.yml` が毎朝 7:00 JST（UTC 22:00）に実行されます。手動送信する場合は `workflow_dispatch` で実行できます。
-GitHub Actions のスケジュールは UTC 基準なので、7:00 JST に合わせるには `0 22 * * *` を設定します。
+`.github/workflows/send_tasks_digest.yml` が毎朝 07:00 JST（22:00 UTC）に実行されます。手動送信する場合は `workflow_dispatch` で実行できます。
+GitHub Actions のスケジュールは UTC 基準なので、07:00 JST に合わせるには `0 22 * * *` を設定します。
 
 ### 4. ローカルで実行（任意）
 
@@ -114,12 +114,20 @@ npm install
 npm run send:digest
 ```
 
-## Cron 例（JST 7:00 相当）
-Cloudflare Workers の cron は UTC です。JST 7:00 は以下の通りです。
+## Cron 例（JST 07:00 相当）
+Cloudflare Workers の cron は UTC です。JST 07:00 は以下の通りです。
 
 ```
 0 22 * * *
 ```
+
+## Cron スケジュール一覧（JST/UTC）
+Workers と GitHub Actions は **同じ UTC cron** に統一しています（JST 07:00）。役割は「Workers = digest 生成」「Actions = 送信」です。
+
+| Trigger | JST | UTC | Cron |
+| --- | --- | --- | --- |
+| Cloudflare Workers scheduled | 07:00 JST | 22:00 UTC (previous day) | `0 22 * * *` |
+| GitHub Actions schedule | 07:00 JST | 22:00 UTC (previous day) | `0 22 * * *` |
 
 ## 使い方（概要）
 1. Cloudflare Workers にデプロイ
@@ -154,6 +162,17 @@ GET /action/move?id=<inbox_page_id>&status=Do
 - `reminder_date`（任意）: Status=Waiting の場合のみ反映（YYYY-MM-DD など）
 
 日付は ISO 文字列や Date 文字列でも受け付け、JST 基準で `YYYY-MM-DD` に正規化して Notion に渡します。正規化できない場合は該当プロパティ更新をスキップします。
+
+### デバッグモード（X-Debug）
+`X-Debug: 1` を付けると、受信 body と allowlist した headers を含む JSON を返します。
+
+```bash
+curl -X POST "$WORKERS_ENDPOINT/action/move" \
+  -H "X-Shortcut-Token: <SHORTCUT_TOKEN>" \
+  -H "X-Debug: 1" \
+  -H "Content-Type: application/json" \
+  -d '{"id":"...","status":"Do"}'
+```
 
 ### 手動確認（Undo URL）
 1) Inbox のアイテムを `/action/move` で Tasks に移動する

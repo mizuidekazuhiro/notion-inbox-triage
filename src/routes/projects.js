@@ -23,7 +23,7 @@ export async function handleProjectsShortcut(request, env) {
   }
 
   const data = await res.json();
-  const choices = (data.results ?? [])
+  const projects = (data.results ?? [])
     .map((page) => {
       const titleProperty = Object.values(page.properties ?? {}).find(
         (property) => property?.type === "title"
@@ -40,10 +40,22 @@ export async function handleProjectsShortcut(request, env) {
     })
     .sort((a, b) => a.label.localeCompare(b.label));
 
-  return new Response(JSON.stringify({ choices }), {
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "no-store"
+  const labels = projects.map((project) => project.label);
+  const byLabel = projects.reduce((accumulator, project) => {
+    accumulator[project.label] = project.value;
+    return accumulator;
+  }, {});
+
+  return new Response(
+    JSON.stringify({
+      labels,
+      by_label: byLabel
+    }),
+    {
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store"
+      }
     }
-  });
+  );
 }

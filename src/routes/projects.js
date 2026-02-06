@@ -1,5 +1,100 @@
 import { notionHeaders } from "../notion/client";
 
+class ProjectsFetchError extends Error {
+  constructor(message, notionStatus, notionErrorExcerpt) {
+    super(message);
+    this.name = "ProjectsFetchError";
+    this.notionStatus = notionStatus;
+    this.notionErrorExcerpt = notionErrorExcerpt;
+  }
+}
+
+function truncateError(value) {
+  return value.slice(0, 300);
+}
+
+function buildProjectsFromResults(results) {
+  return (results ?? [])
+    .map((page) => {
+      const titleProperty = Object.values(page.properties ?? {}).find(
+        (property) => property?.type === "title"
+      );
+      const titleText = (titleProperty?.title ?? [])
+        .map((item) => item?.plain_text)
+        .filter(Boolean)
+        .join("")
+        .trim();
+      return {
+        label: titleText || "Untitled",
+        value: page.id
+      };
+    })
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+async function fetchProjectsFromNotion(env) {
+  let res;
+  let notionStatus = null;
+
+  try {
+    res = await fetch(
+      `https://api.notion.com/v1/databases/${env.PROJECTS_DB_ID}/query`,
+      {
+        method: "POST",
+        headers: notionHeaders(env),
+        body: JSON.stringify({
+          page_size: 100,
+          sorts: [{ property: "名前", direction: "ascending" }]
+        })
+      }
+    );
+    notionStatus = res.status;
+  } catch (error) {
+    const notionErrorExcerpt = truncateError(
+      String(error?.message || error || "")
+    );
+    throw new ProjectsFetchError(
+      "Failed to fetch projects",
+      null,
+      notionErrorExcerpt
+    );
+  }
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    const notionErrorExcerpt = truncateError(text);
+    throw new ProjectsFetchError(
+      `Failed to fetch projects: ${text}`,
+      notionStatus,
+      notionErrorExcerpt
+    );
+  }
+
+  const data = await res.json();
+  return { data, notionStatus };
+}
+
+async function getProjectsShortcutData(env) {
+  const { data, notionStatus } = await fetchProjectsFromNotion(env);
+  const projects = buildProjectsFromResults(data.results ?? []);
+  return { projects, notionStatus };
+}
+
+function buildChoicesFromProjects(projects) {
+  const seenLabels = new Set();
+  const choices = [];
+
+  for (const project of projects) {
+    if (seenLabels.has(project.label)) {
+      continue;
+    }
+    seenLabels.add(project.label);
+    choices.push({ label: project.label, value: project.value });
+  }
+
+  return choices;
+}
+
 export async function handleProjectsShortcut(request, env) {
   const url = new URL(request.url);
   const debugEnabled = url.searchParams.get("debug") === "1";
@@ -28,26 +123,39 @@ export async function handleProjectsShortcut(request, env) {
     return new Response("PROJECTS_DB_ID is not configured", { status: 500 });
   }
 
-  let res;
+  let projects = [];
   let notionStatus = null;
   let notionErrorExcerpt = "";
-  const truncateError = (value) => value.slice(0, 300);
 
   try {
-    res = await fetch(
-      `https://api.notion.com/v1/databases/${env.PROJECTS_DB_ID}/query`,
-      {
-        method: "POST",
-        headers: notionHeaders(env),
-        body: JSON.stringify({
-          page_size: 100,
-          sorts: [{ property: "名前", direction: "ascending" }]
-        })
-      }
-    );
-    notionStatus = res.status;
+    const data = await getProjectsShortcutData(env);
+    projects = data.projects;
+    notionStatus = data.notionStatus;
   } catch (error) {
-    notionErrorExcerpt = truncateError(String(error?.message || error || ""));
+    if (error instanceof ProjectsFetchError) {
+      notionStatus = error.notionStatus ?? null;
+      notionErrorExcerpt = error.notionErrorExcerpt ?? "";
+      if (debugEnabled) {
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            projects_db_id_present: projectsDbIdPresent,
+            notion_token_present: notionTokenPresent,
+            notion_status: notionStatus,
+            notion_error_excerpt: notionErrorExcerpt,
+            choices_count: 0
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json; charset=utf-8",
+              "Cache-Control": "no-store"
+            }
+          }
+        );
+      }
+      return new Response(error.message, { status: 500 });
+    }
+
     if (debugEnabled) {
       return new Response(
         JSON.stringify({
@@ -55,7 +163,7 @@ export async function handleProjectsShortcut(request, env) {
           projects_db_id_present: projectsDbIdPresent,
           notion_token_present: notionTokenPresent,
           notion_status: null,
-          notion_error_excerpt: notionErrorExcerpt,
+          notion_error_excerpt: "",
           choices_count: 0
         }),
         {
@@ -68,48 +176,6 @@ export async function handleProjectsShortcut(request, env) {
     }
     return new Response("Failed to fetch projects", { status: 500 });
   }
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    notionErrorExcerpt = truncateError(text);
-    if (debugEnabled) {
-      return new Response(
-        JSON.stringify({
-          ok: false,
-          projects_db_id_present: projectsDbIdPresent,
-          notion_token_present: notionTokenPresent,
-          notion_status: notionStatus,
-          notion_error_excerpt: notionErrorExcerpt,
-          choices_count: 0
-        }),
-        {
-          headers: {
-            "Content-Type": "application/json; charset=utf-8",
-            "Cache-Control": "no-store"
-          }
-        }
-      );
-    }
-    return new Response(`Failed to fetch projects: ${text}`, { status: 500 });
-  }
-
-  const data = await res.json();
-  const projects = (data.results ?? [])
-    .map((page) => {
-      const titleProperty = Object.values(page.properties ?? {}).find(
-        (property) => property?.type === "title"
-      );
-      const titleText = (titleProperty?.title ?? [])
-        .map((item) => item?.plain_text)
-        .filter(Boolean)
-        .join("")
-        .trim();
-      return {
-        label: titleText || "Untitled",
-        value: page.id
-      };
-    })
-    .sort((a, b) => a.label.localeCompare(b.label));
 
   const labels = projects.map((project) => project.label);
   const byLabel = projects.reduce((accumulator, project) => {
@@ -148,4 +214,42 @@ export async function handleProjectsShortcut(request, env) {
       }
     }
   );
+}
+
+export async function handleProjectsChoices(request, env) {
+  if (!env.PROJECTS_DB_ID) {
+    return new Response(
+      JSON.stringify({ error: "PROJECTS_DB_ID is not configured" }),
+      {
+        status: 500,
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-store"
+        }
+      }
+    );
+  }
+
+  try {
+    const { projects } = await getProjectsShortcutData(env);
+    const choices = buildChoicesFromProjects(projects);
+    return new Response(JSON.stringify({ choices }), {
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "public, max-age=300"
+      }
+    });
+  } catch (error) {
+    const message =
+      error instanceof ProjectsFetchError
+        ? error.message
+        : "Failed to fetch projects";
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store"
+      }
+    });
+  }
 }

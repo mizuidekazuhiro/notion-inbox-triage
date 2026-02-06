@@ -4,7 +4,7 @@ import { handleInboxList, handleInboxShortcut, handleInboxHtml, handleMailConten
 import { handleMove } from "./routes/move";
 import { handleUndo } from "./routes/undo";
 import { handleConfirm, handleTaskUpdate } from "./routes/confirm";
-import { handleProjectsShortcut } from "./routes/projects";
+import { handleProjectsShortcut, handleProjectsChoices } from "./routes/projects";
 import { sanitizeSubject, readMessageBody } from "./email/parseEmail";
 import { createInboxItem } from "./notion/inboxCreate";
 import { jsonResponse } from "./utils/http";
@@ -31,6 +31,10 @@ export default {
 
     if (url.pathname === "/api/projects/shortcut") {
       return handleProjectsShortcut(request, env);
+    }
+
+    if (url.pathname === "/api/projects/choices") {
+      return handleProjectsChoices(request, env);
     }
 
     if (url.pathname === "/api/tasks/do") {

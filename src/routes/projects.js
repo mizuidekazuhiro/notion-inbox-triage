@@ -86,6 +86,7 @@ function buildChoicesFromProjects(projects) {
 
   for (const project of projects) {
     if (seenLabels.has(project.label)) {
+      console.warn("Duplicate project label", project.label);
       continue;
     }
     seenLabels.add(project.label);
@@ -233,7 +234,15 @@ export async function handleProjectsChoices(request, env) {
   try {
     const { projects } = await getProjectsShortcutData(env);
     const choices = buildChoicesFromProjects(projects);
-    return new Response(JSON.stringify({ choices }), {
+    const labels = choices.map((choice) => choice.label);
+    const byLabel = choices.reduce((accumulator, choice) => {
+      if (choice.label in accumulator) {
+        console.warn("Duplicate project label", choice.label);
+      }
+      accumulator[choice.label] = choice.value;
+      return accumulator;
+    }, {});
+    return new Response(JSON.stringify({ choices, labels, by_label: byLabel }), {
       headers: {
         "Content-Type": "application/json; charset=utf-8",
         "Cache-Control": "public, max-age=300"

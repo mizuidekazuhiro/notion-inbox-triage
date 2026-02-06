@@ -5,6 +5,7 @@ Notion Inbox を取得し、HTML/JSONとして出力したり、Inbox から Tas
 ## できること
 - Notion Inbox の一覧取得（JSON）
 - iOSショートカット用の choices 取得（Inbox / Projects）
+- iOSショートカット高速化用の Projects choices 取得（/api/projects/choices）
 - Inbox を HTML で確認（ブラウザ用）
 - Inbox → Tasks への移動（GET/POST）
 - Undo（作成した Task をアーカイブし、Inbox 側を復旧）
@@ -21,6 +22,7 @@ Workers の HTTP エンドポイントを提供し、以下の用途を担いま
 - `/api/inbox`：Inbox の JSON 取得
 - `/api/inbox/shortcut`：ショートカット向けの choices 取得
 - `/api/projects/shortcut`：Projects DB の choices 取得
+- `/api/projects/choices`：iOSショートカット高速化用の Projects choices 取得
 - `/inbox`：Inbox HTML
 - `/mail/content`：メール本文生成
 - `/action/move`：Inbox → Tasks 移動（GET/POST）
@@ -133,6 +135,16 @@ Workers と GitHub Actions は **同じ UTC cron** に統一しています（JS
 1. Cloudflare Workers にデプロイ
 2. Notion API トークンと DB ID を設定
 3. 各エンドポイントを用途に応じて呼び出す
+
+## iOSショートカット高速化（Projects choices）
+Projects の選択肢は、辞書参照を避けるため `/api/projects/choices` を使うのが推奨です。
+従来の `/api/projects/shortcut` は互換性維持のため残してあり、既存ショートカットはそのまま動きます。
+
+### 最小手順（例）
+1. **URL の内容を取得**: `GET /api/projects/choices`
+2. **辞書から値を取得**: レスポンスの `choices` 配列を取り出す
+3. **リストから選択**: `choices` をリストとして表示（表示名は `label`）
+4. **値の取得**: 選択された項目の `value` を `project_id` として後続の `/action/move` に渡す
 
 ## Inbox → Tasks 移動（/action/move）
 ### GET（従来互換）

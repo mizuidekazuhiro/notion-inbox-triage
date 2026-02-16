@@ -44,7 +44,13 @@ async function fetchProjectsFromNotion(env) {
         headers: notionHeaders(env),
         body: JSON.stringify({
           page_size: 100,
-          sorts: [{ property: "名前", direction: "ascending" }]
+          sorts: [{ property: "名前", direction: "ascending" }],
+          filter: {
+            or: [
+              { property: "Status", status: { equals: "Active" } },
+              { property: "Status", status: { equals: "Hold" } }
+            ]
+          }
         })
       }
     );

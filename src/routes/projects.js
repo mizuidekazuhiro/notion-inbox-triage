@@ -47,8 +47,8 @@ async function fetchProjectsFromNotion(env) {
           sorts: [{ property: "名前", direction: "ascending" }],
           filter: {
             or: [
-              { property: "Status", status: { equals: "Active" } },
-              { property: "Status", status: { equals: "Hold" } }
+              { property: "Status", select: { equals: "Active" } },
+              { property: "Status", select: { equals: "Hold" } }
             ]
           }
         })

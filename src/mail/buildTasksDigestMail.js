@@ -129,7 +129,10 @@ export function buildTasksDigestMail({
   <meta charset="UTF-8">
 </head>
 <body style="
-  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Hiragino Sans\", \"Yu Gothic\", Meiryo, Arial, sans-serif;
+  font-size:14px;
+  line-height:1.7;
+  color:#222222;
   background:#f7f7f7;
   padding:16px;
 ">

@@ -10,6 +10,40 @@ const DEBUG_HEADER_ALLOWLIST = [
   "x-debug",
   "x-shortcut-token"
 ];
+const READ_ONLY_PROPERTY_TYPES = new Set([
+  "formula",
+  "rollup",
+  "created_time",
+  "created_by",
+  "last_edited_time",
+  "last_edited_by",
+  "unique_id",
+  "verification",
+  "button"
+]);
+const SYSTEM_MANAGED_PROPERTY_NAMES = new Set([
+  "Processed",
+  "Processed At",
+  "Undo URL",
+  "Inbox Page ID",
+  "Triage Source",
+  "Triage At",
+  "Status"
+]);
+const COPYABLE_PROPERTY_TYPES = new Set([
+  "title",
+  "rich_text",
+  "select",
+  "multi_select",
+  "date",
+  "checkbox",
+  "url",
+  "email",
+  "phone_number",
+  "number",
+  "relation",
+  "people"
+]);
 
 export async function handleMove(request, env) {
   const url = new URL(request.url);
@@ -139,9 +173,23 @@ export async function handleMoveCore({
 }) {
   const resolvedBaseUrl = baseUrl || env.BASE_URL || "";
 
-  const pageRes = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
-    headers: notionHeaders(env)
-  });
+  let pageRes;
+  let inboxDbRes;
+  let tasksDbRes;
+
+  try {
+    [pageRes, inboxDbRes, tasksDbRes] = await Promise.all([
+      fetch(`https://api.notion.com/v1/pages/${pageId}`, {
+        headers: notionHeaders(env)
+      }),
+      fetchDatabaseSchema(env, env.INBOX_DB_ID),
+      fetchDatabaseSchema(env, env.TASKS_DB_ID)
+    ]);
+  } catch (error) {
+    const message = error?.message || 'Failed to fetch Notion schema';
+    console.error(message);
+    return new Response(message, { status: 500 });
+  }
 
   if (!pageRes.ok) {
     const text = await pageRes.text().catch(() => "");
@@ -149,6 +197,8 @@ export async function handleMoveCore({
   }
 
   const page = await pageRes.json();
+  const inboxDatabase = inboxDbRes;
+  const tasksDatabase = tasksDbRes;
 
   const processedText =
     page.properties["Processed"]?.rich_text?.[0]?.plain_text?.trim() || "";
@@ -173,31 +223,18 @@ export async function handleMoveCore({
     })
   });
 
-  const title = page.properties.Name?.title?.[0]?.text?.content ?? "Untitled";
-
-  const properties = {
-    名前: { title: [{ text: { content: title } }] },
-    Status: { select: { name: status } },
-    "Triage Source": { select: { name: "Shortcut" } },
-    "Triage At": { date: { start: now } },
-    "Inbox Page ID": {
-      rich_text: [{ text: { content: pageId } }]
-    }
-  };
-
-  if (status === "Do") {
-    if (priority) {
-      properties.Priority = { select: { name: priority } };
-    }
-    if (dueDate) {
-      properties["Due Date"] = { date: { start: dueDate } };
-    }
-    if (projectId) {
-      properties.Project = { relation: [{ id: projectId }] };
-    }
-  } else if (status === "Waiting" && reminderDate) {
-    properties["Reminder Date"] = { date: { start: reminderDate } };
-  }
+  const properties = buildTaskPropertiesFromInboxPage({
+    inboxPage: page,
+    inboxDbSchema: inboxDatabase,
+    tasksDbSchema: tasksDatabase,
+    pageId,
+    status,
+    now,
+    priority,
+    dueDate,
+    reminderDate,
+    projectId
+  });
 
   const createRes = await fetch("https://api.notion.com/v1/pages", {
     method: "POST",
@@ -209,7 +246,31 @@ export async function handleMoveCore({
   });
 
   if (!createRes.ok) {
-    return new Response("Failed to create task", { status: 500 });
+    const errorText = await createRes.text().catch(() => "");
+    const message = `Failed to create task: ${errorText}`;
+    console.error(message);
+
+    if (debug) {
+      return new Response(
+        JSON.stringify(
+          {
+            error: "Failed to create task",
+            notion_response: errorText || null,
+            properties,
+            body: debug.body,
+            headers: debug.headers
+          },
+          null,
+          2
+        ),
+        {
+          status: 500,
+          headers: { "Content-Type": "application/json; charset=utf-8" }
+        }
+      );
+    }
+
+    return new Response(message, { status: 500 });
   }
 
   const createdTask = await createRes.json();
@@ -319,6 +380,188 @@ export async function handleMoveCore({
     status: 200,
     headers: { "Content-Type": "text/html; charset=UTF-8" }
   });
+}
+
+async function fetchDatabaseSchema(env, databaseId) {
+  const res = await fetch(`https://api.notion.com/v1/databases/${databaseId}`, {
+    headers: notionHeaders(env)
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Failed to fetch database schema (${databaseId}): ${text}`);
+  }
+
+  return res.json();
+}
+
+function detectTitlePropertyName(database) {
+  const entries = Object.entries(database?.properties || {});
+  const found = entries.find(([, schema]) => schema?.type === "title");
+  return found?.[0] || null;
+}
+
+function buildTaskPropertiesFromInboxPage({
+  inboxPage,
+  inboxDbSchema,
+  tasksDbSchema,
+  pageId,
+  status,
+  now,
+  priority,
+  dueDate,
+  reminderDate,
+  projectId
+}) {
+  const properties = {};
+  const inboxProperties = inboxPage?.properties || {};
+  const inboxSchema = inboxDbSchema?.properties || {};
+  const tasksSchema = tasksDbSchema?.properties || {};
+  const sourceTitleName = detectTitlePropertyName(inboxDbSchema);
+  const targetTitleName = detectTitlePropertyName(tasksDbSchema);
+
+  for (const [sourcePropertyName, sourceProperty] of Object.entries(inboxProperties)) {
+    if (SYSTEM_MANAGED_PROPERTY_NAMES.has(sourcePropertyName)) continue;
+
+    const targetPropertySchema = tasksSchema[sourcePropertyName];
+    if (!targetPropertySchema) continue;
+
+    const copiedValue = copyCompatiblePropertyValue({
+      sourcePropertyName,
+      sourceProperty,
+      sourcePropertySchema: inboxSchema[sourcePropertyName],
+      targetPropertySchema
+    });
+
+    if (copiedValue) {
+      properties[sourcePropertyName] = copiedValue;
+    }
+  }
+
+  if (sourceTitleName && targetTitleName) {
+    const sourceTitle = inboxProperties[sourceTitleName];
+    const copiedTitle = copyCompatiblePropertyValue({
+      sourcePropertyName: sourceTitleName,
+      sourceProperty: sourceTitle,
+      sourcePropertySchema: inboxSchema[sourceTitleName],
+      targetPropertySchema: tasksSchema[targetTitleName]
+    });
+
+    if (copiedTitle) {
+      properties[targetTitleName] = copiedTitle;
+    }
+  }
+
+  properties.Status = { select: { name: status } };
+  properties["Triage Source"] = { select: { name: "Shortcut" } };
+  properties["Triage At"] = { date: { start: now } };
+  properties["Inbox Page ID"] = {
+    rich_text: [{ text: { content: pageId } }]
+  };
+
+  if (status === "Do") {
+    if (priority) {
+      properties.Priority = { select: { name: priority } };
+    }
+    if (dueDate) {
+      properties["Due Date"] = { date: { start: dueDate } };
+    }
+    if (projectId) {
+      properties.Project = { relation: [{ id: projectId }] };
+    }
+  }
+
+  if (status === "Waiting" && reminderDate) {
+    properties["Reminder Date"] = { date: { start: reminderDate } };
+  }
+
+  return properties;
+}
+
+function copyCompatiblePropertyValue({
+  sourcePropertyName,
+  sourceProperty,
+  sourcePropertySchema,
+  targetPropertySchema
+}) {
+  const sourceType = sourceProperty?.type || sourcePropertySchema?.type;
+  const targetType = targetPropertySchema?.type;
+
+  if (!sourceType || !targetType) return null;
+  if (READ_ONLY_PROPERTY_TYPES.has(sourceType) || READ_ONLY_PROPERTY_TYPES.has(targetType)) {
+    return null;
+  }
+  if (!COPYABLE_PROPERTY_TYPES.has(sourceType) || !COPYABLE_PROPERTY_TYPES.has(targetType)) {
+    return null;
+  }
+  if (sourceType !== targetType) return null;
+
+  switch (targetType) {
+    case "title": {
+      return { title: Array.isArray(sourceProperty?.title) ? sourceProperty.title : [] };
+    }
+    case "rich_text": {
+      return {
+        rich_text: Array.isArray(sourceProperty?.rich_text) ? sourceProperty.rich_text : []
+      };
+    }
+    case "select": {
+      const name = sourceProperty?.select?.name;
+      return name ? { select: { name } } : null;
+    }
+    case "multi_select": {
+      const items = Array.isArray(sourceProperty?.multi_select)
+        ? sourceProperty.multi_select
+            .map((item) => (item?.name ? { name: item.name } : null))
+            .filter(Boolean)
+        : [];
+      return { multi_select: items };
+    }
+    case "date": {
+      if (!sourceProperty?.date) return null;
+      const { start, end = null, time_zone = null } = sourceProperty.date;
+      if (!start) return null;
+      return { date: { start, end, time_zone } };
+    }
+    case "checkbox": {
+      return { checkbox: Boolean(sourceProperty?.checkbox) };
+    }
+    case "url": {
+      if (!sourceProperty?.url) return null;
+      return { url: sourceProperty.url };
+    }
+    case "email": {
+      if (!sourceProperty?.email) return null;
+      return { email: sourceProperty.email };
+    }
+    case "phone_number": {
+      if (!sourceProperty?.phone_number) return null;
+      return { phone_number: sourceProperty.phone_number };
+    }
+    case "number": {
+      if (typeof sourceProperty?.number !== "number") return null;
+      return { number: sourceProperty.number };
+    }
+    case "relation": {
+      const relation = Array.isArray(sourceProperty?.relation)
+        ? sourceProperty.relation
+            .map((item) => (item?.id ? { id: item.id } : null))
+            .filter(Boolean)
+        : [];
+      return { relation };
+    }
+    case "people": {
+      const people = Array.isArray(sourceProperty?.people)
+        ? sourceProperty.people
+            .map((person) => (person?.id ? { id: person.id } : null))
+            .filter(Boolean)
+        : [];
+      return { people };
+    }
+    default:
+      console.warn(`Unsupported property copy type for ${sourcePropertyName}: ${targetType}`);
+      return null;
+  }
 }
 
 function buildUndoUrlProperty({ undoUrl, propertyType }) {

@@ -175,6 +175,16 @@ GET /action/move?id=<inbox_page_id>&status=Do
 
 日付は ISO 文字列や Date 文字列でも受け付け、JST 基準で `YYYY-MM-DD` に正規化して Notion に渡します。正規化できない場合は該当プロパティ更新をスキップします。
 
+### Inbox → Tasks のプロパティ転記ルール
+- Inbox ページ取得後、Inbox DB / Tasks DB のスキーマを参照し、**Tasks DB 側に同名かつ型互換のあるプロパティ**だけを自動転記します。
+- title は Inbox 側の title プロパティ（通常は `Name`）から、Tasks DB 側の title プロパティ（通常は `名前`）へ、**固定名に依存せず title type を検出して**コピーします。
+- `Raw` のような本文相当の `rich_text` プロパティは、Inbox / Tasks の両方に同名プロパティが存在すればそのまま転記されます。
+- `select` / `multi_select` / `rich_text` / `date` / `checkbox` / `url` / `email` / `phone_number` / `number` / `relation` / `people` は可能な範囲でコピーします。
+- `Processed` / `Processed At` / `Undo URL` / `Inbox Page ID` / `Triage Source` / `Triage At` / `Status` は Inbox 由来をコピーせず、システム側で設定します。
+- `formula` / `rollup` / `created_time` / `created_by` / `last_edited_time` / `last_edited_by` / `unique_id` / `verification` / `button` などの read-only 系プロパティはコピーしません。
+- Tasks DB に存在しない追加プロパティは無視されます。
+- Tasks 作成後の Undo URL 更新処理は従来通り維持されます。
+
 ### デバッグモード（X-Debug）
 `X-Debug: 1` を付けると、受信 body と allowlist した headers を含む JSON を返します。
 

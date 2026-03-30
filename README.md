@@ -185,6 +185,13 @@ GET /action/move?id=<inbox_page_id>&status=Do
 - Tasks DB に存在しない追加プロパティは無視されます。
 - Tasks 作成後の Undo URL 更新処理は従来通り維持されます。
 
+### Inbox → Tasks の本文（ページ body / block children）転記
+- `/action/move` ではプロパティだけでなく、Inbox ページの本文 block children も Tasks ページ本文へ複製します。
+- 本文転記は既存 block の「移動」ではなく、source block を読み取って append 可能な payload に変換し、Tasks 側へ新規 block として append します。
+- Notion API の制約に合わせ、append は 100 block ごとのバッチで実行します。
+- `child_page` / `child_database` / `link_preview` / `unsupported` など再生成が難しい block はスキップする場合があります（スキップ件数・種別はログに出力）。
+- 本文転記に失敗した場合は Inbox を成功扱いにせず、`Processed` / `Processed At` は更新しません。作成済み Task は best-effort でアーカイブ cleanup を試行します。
+
 ### デバッグモード（X-Debug）
 `X-Debug: 1` を付けると、受信 body と allowlist した headers を含む JSON を返します。
 
@@ -232,6 +239,13 @@ curl -sS -X POST "<BASE_URL>/action/move" \
     "reminder_date": "2024-01-15"
   }'
 ```
+
+### 本文コピーの手動テスト手順
+1. 本文あり Inbox ページを作成する
+2. 本文に 箇条書き / `to_do` / `toggle` / `code` block を入れる
+3. `/action/move` を実行する
+4. Tasks 側ページ本文に block が複製されていることを確認する
+5. Undo URL が維持されていることを確認する
 
 ## Notion 側の前提プロパティ名
 ### Tasks DB

@@ -1,4 +1,5 @@
 import { notionHeaders } from "../notion/client";
+import { copyPageBody } from "../notion/blocks";
 import { normalizeJstDateString } from "../utils/date";
 import { createUndoSignature } from "../utils/signature";
 
@@ -275,6 +276,97 @@ export async function handleMoveCore({
 
   const createdTask = await createRes.json();
   const createdTaskId = createdTask?.id;
+  let bodyCopySummary = null;
+
+  if (!createdTaskId) {
+    const message = `Task created but id missing for sourcePageId=${pageId}`;
+    console.error(message);
+    return new Response(message, { status: 500 });
+  }
+
+  try {
+    bodyCopySummary = await copyPageBody(env, pageId, createdTaskId);
+    console.info(
+      JSON.stringify({
+        message: "move.body.copy.success",
+        sourcePageId: pageId,
+        createdTaskId,
+        sourceTopLevelBlockCount: bodyCopySummary.sourceTopLevelCount,
+        appendedBlockCount: bodyCopySummary.appendedCount,
+        skippedBlockCount: bodyCopySummary.skippedCount,
+        unsupportedBlockTypes: bodyCopySummary.skippedTypes,
+        appendBatchCount: bodyCopySummary.batchCount
+      })
+    );
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        message: "move.body.copy.failed",
+        sourcePageId: pageId,
+        createdTaskId,
+        failedBlockTypes: error?.failedBlockTypes || [],
+        notionStatus: error?.notionStatus || null,
+        notionResponseBody: error?.notionBody || null,
+        stack: error?.stack || String(error)
+      })
+    );
+
+    if (createdTaskId) {
+      try {
+        const cleanupRes = await fetch(`https://api.notion.com/v1/pages/${createdTaskId}`, {
+          method: "PATCH",
+          headers: notionHeaders(env),
+          body: JSON.stringify({ archived: true })
+        });
+        if (!cleanupRes.ok) {
+          const cleanupText = await cleanupRes.text().catch(() => "");
+          console.error(
+            JSON.stringify({
+              message: "move.body.copy.cleanup.failed",
+              sourcePageId: pageId,
+              createdTaskId,
+              notionStatus: cleanupRes.status,
+              notionResponseBody: cleanupText
+            })
+          );
+        }
+      } catch (cleanupError) {
+        console.error(
+          JSON.stringify({
+            message: "move.body.copy.cleanup.exception",
+            sourcePageId: pageId,
+            createdTaskId,
+            stack: cleanupError?.stack || String(cleanupError)
+          })
+        );
+      }
+    }
+
+    const failureMessage = `Failed to copy page body (sourcePageId=${pageId}, createdTaskId=${createdTaskId || "unknown"})`;
+    if (debug) {
+      return new Response(
+        JSON.stringify(
+          {
+            error: failureMessage,
+            source_page_id: pageId,
+            created_task_id: createdTaskId ?? null,
+            failed_block_types: error?.failedBlockTypes || [],
+            notion_status: error?.notionStatus || null,
+            notion_response: error?.notionBody || null,
+            body: debug.body,
+            headers: debug.headers
+          },
+          null,
+          2
+        ),
+        {
+          status: 500,
+          headers: { "Content-Type": "application/json; charset=utf-8" }
+        }
+      );
+    }
+    return new Response(failureMessage, { status: 500 });
+  }
 
   let undoUrlWithSig = "";
 
@@ -363,6 +455,7 @@ export async function handleMoveCore({
           inbox_page_id: pageId,
           created_task_id: createdTaskId ?? null,
           undo_url: undoUrlWithSig || undoUrl,
+          body_copy_summary: bodyCopySummary,
           body: debug.body,
           headers: debug.headers
         },

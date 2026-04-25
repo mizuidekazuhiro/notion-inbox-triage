@@ -1,4 +1,4 @@
-import { notionFetch } from "./client";
+import { notionFetch } from "./client.js";
 
 const READ_ONLY_BLOCK_FIELDS = new Set([
   "id",
@@ -229,7 +229,7 @@ async function copyBlockLevel({ env, sourceBlocks, targetParentId, summary, skip
   }
 }
 
-function sanitizeTypePayload(typePayload) {
+export function sanitizeTypePayload(typePayload) {
   if (!typePayload || typeof typePayload !== "object") return {};
   const cloned = JSON.parse(JSON.stringify(typePayload));
 
@@ -241,6 +241,13 @@ function sanitizeTypePayload(typePayload) {
     if (key === "children") {
       delete cloned[key];
       continue;
+    }
+    if (key === "icon" && cloned[key] === null) {
+      delete cloned[key];
+      continue;
+    }
+    if (cloned[key] === null) {
+      delete cloned[key];
     }
   }
 

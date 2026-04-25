@@ -1,7 +1,7 @@
-import { notionHeaders } from "../notion/client";
-import { copyPageBody } from "../notion/blocks";
-import { normalizeJstDateString } from "../utils/date";
-import { createUndoSignature } from "../utils/signature";
+import { notionHeaders } from "../notion/client.js";
+import { copyPageBody } from "../notion/blocks.js";
+import { normalizeJstDateString } from "../utils/date.js";
+import { createUndoSignature } from "../utils/signature.js";
 
 const ALLOWED_STATUS = ["Inbox", "Do", "Thinking", "Someday", "Waiting", "Done", "Drop"];
 const DEBUG_HEADER_ALLOWLIST = [
@@ -45,6 +45,7 @@ const COPYABLE_PROPERTY_TYPES = new Set([
   "relation",
   "people"
 ]);
+const RETRYABLE_PROCESSING_TEXT = "processing...";
 
 export async function handleMove(request, env) {
   const url = new URL(request.url);
@@ -206,7 +207,9 @@ export async function handleMoveCore({
 
   const processedAt = page.properties["Processed At"]?.date?.start || "";
 
-  if (processedText || processedAt) {
+  const isRetryableProcessingState =
+    processedText.toLowerCase() === RETRYABLE_PROCESSING_TEXT && !processedAt;
+  if ((processedText || processedAt) && !isRetryableProcessingState) {
     return new Response("Already processed", { status: 200 });
   }
 
@@ -299,6 +302,10 @@ export async function handleMoveCore({
       })
     );
   } catch (error) {
+    const copyFailureDetails = {
+      notionStatus: error?.notionStatus || null,
+      notionBody: error?.notionBody || null
+    };
     console.error(
       JSON.stringify({
         message: "move.body.copy.failed",
@@ -342,6 +349,47 @@ export async function handleMoveCore({
       }
     }
 
+    try {
+      const rollbackProperties = {
+        Processed: { rich_text: [] },
+        "Processed At": { date: null }
+      };
+      const errorMessageProperty = buildErrorMessageProperty({
+        inboxDbSchema: inboxDatabase,
+        errorMessage: error?.notionBody || String(error?.message || "Unknown Notion API error")
+      });
+      if (errorMessageProperty) {
+        rollbackProperties["Error Message"] = errorMessageProperty;
+      }
+
+      const rollbackRes = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
+        method: "PATCH",
+        headers: notionHeaders(env),
+        body: JSON.stringify({
+          properties: rollbackProperties
+        })
+      });
+      if (!rollbackRes.ok) {
+        const rollbackText = await rollbackRes.text().catch(() => "");
+        console.error(
+          JSON.stringify({
+            message: "move.body.copy.rollback.failed",
+            sourcePageId: pageId,
+            notionStatus: rollbackRes.status,
+            notionResponseBody: rollbackText
+          })
+        );
+      }
+    } catch (rollbackError) {
+      console.error(
+        JSON.stringify({
+          message: "move.body.copy.rollback.exception",
+          sourcePageId: pageId,
+          stack: rollbackError?.stack || String(rollbackError)
+        })
+      );
+    }
+
     const failureMessage = `Failed to copy page body (sourcePageId=${pageId}, createdTaskId=${createdTaskId || "unknown"})`;
     if (debug) {
       return new Response(
@@ -351,8 +399,8 @@ export async function handleMoveCore({
             source_page_id: pageId,
             created_task_id: createdTaskId ?? null,
             failed_block_types: error?.failedBlockTypes || [],
-            notion_status: error?.notionStatus || null,
-            notion_response: error?.notionBody || null,
+            notion_status: copyFailureDetails.notionStatus,
+            notion_response: copyFailureDetails.notionBody,
             body: debug.body,
             headers: debug.headers
           },
@@ -662,6 +710,27 @@ function buildUndoUrlProperty({ undoUrl, propertyType }) {
     return { rich_text: [{ text: { content: undoUrl } }] };
   }
   return { url: undoUrl };
+}
+
+function buildErrorMessageProperty({ inboxDbSchema, errorMessage }) {
+  const propertySchema = inboxDbSchema?.properties?.["Error Message"];
+  const propertyType = propertySchema?.type;
+  if (!propertyType) return null;
+
+  const content = String(errorMessage || "").slice(0, 2000);
+  if (!content) return null;
+
+  if (propertyType === "rich_text") {
+    return { rich_text: [{ text: { content } }] };
+  }
+  if (propertyType === "title") {
+    return { title: [{ text: { content } }] };
+  }
+  if (propertyType === "url") {
+    return { url: content };
+  }
+
+  return null;
 }
 
 function normalizeStatus(s) {

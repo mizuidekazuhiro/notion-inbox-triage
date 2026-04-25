@@ -26,6 +26,20 @@ async function createActionSignature(secret, taskId, to, exp) {
   return toHex(signature);
 }
 
+async function createMoveChooseSignature(secret, inboxPageId) {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const data = encoder.encode(`${inboxPageId}`);
+  const signature = await crypto.subtle.sign("HMAC", key, data);
+  return toHex(signature);
+}
+
 function toHex(buffer) {
   const bytes = new Uint8Array(buffer);
   return Array.from(bytes)
@@ -42,4 +56,4 @@ function safeEqual(a, b) {
   return result === 0;
 }
 
-export { createUndoSignature, createActionSignature, safeEqual };
+export { createUndoSignature, createActionSignature, createMoveChooseSignature, safeEqual };

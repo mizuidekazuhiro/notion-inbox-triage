@@ -89,7 +89,7 @@ export async function handleInboxShortcut(request, env) {
 
 export async function handleInboxHtml(request, env) {
   const inbox = await fetchInbox(env);
-  const html = buildInboxMail(inbox, env.BASE_URL);
+  const html = await buildInboxMail(inbox, env.BASE_URL, env.ACTION_SECRET);
 
   return new Response(html, {
     headers: {
@@ -101,7 +101,7 @@ export async function handleInboxHtml(request, env) {
 
 export async function handleMailContent(request, env) {
   const inbox = await fetchInbox(env);
-  const body = buildInboxMail(inbox, env.BASE_URL);
+  const body = await buildInboxMail(inbox, env.BASE_URL, env.ACTION_SECRET);
 
   return new Response(
     JSON.stringify({

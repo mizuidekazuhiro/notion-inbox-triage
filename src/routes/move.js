@@ -1,7 +1,7 @@
 import { notionHeaders } from "../notion/client.js";
 import { copyPageBody } from "../notion/blocks.js";
 import { normalizeJstDateString } from "../utils/date.js";
-import { createUndoSignature } from "../utils/signature.js";
+import { createMoveChooseSignature, createUndoSignature, safeEqual } from "../utils/signature.js";
 
 const ALLOWED_STATUS = ["Inbox", "Do", "Thinking", "Someday", "Waiting", "Done", "Drop"];
 const DEBUG_HEADER_ALLOWLIST = [
@@ -46,6 +46,9 @@ const COPYABLE_PROPERTY_TYPES = new Set([
   "people"
 ]);
 const RETRYABLE_PROCESSING_TEXT = "processing...";
+const MOVE_CHOOSE_STATUS = ["Do", "Waiting", "Someday", "Thinking", "Done", "Drop"];
+const UI_FONT_FAMILY =
+  "'Yu Gothic UI','Yu Gothic','YuGothic','Hiragino Kaku Gothic ProN','Meiryo',Arial,sans-serif";
 
 export async function handleMove(request, env) {
   const url = new URL(request.url);
@@ -65,6 +68,60 @@ export async function handleMove(request, env) {
   }
 
   return handleMoveByBody(request, env);
+}
+
+export async function handleMoveChoose(request, env) {
+  if (!env.ACTION_SECRET) {
+    return new Response("Missing ACTION_SECRET", { status: 500 });
+  }
+
+  const url = new URL(request.url);
+
+  if (request.method === "GET") {
+    const inboxPageId = (url.searchParams.get("inbox_page_id") || "").trim();
+    const sig = (url.searchParams.get("sig") || "").trim();
+    if (!inboxPageId || !sig) {
+      return new Response("inbox_page_id and sig are required", { status: 400 });
+    }
+
+    const expectedSig = await createMoveChooseSignature(env.ACTION_SECRET, inboxPageId);
+    if (!safeEqual(expectedSig, sig)) {
+      return new Response("invalid signature", { status: 403 });
+    }
+
+    return new Response(buildMoveChooseHtml({ inboxPageId, sig }), {
+      status: 200,
+      headers: { "Content-Type": "text/html; charset=UTF-8" }
+    });
+  }
+
+  if (request.method !== "POST") {
+    return new Response("Method Not Allowed", { status: 405 });
+  }
+
+  const form = await request.formData();
+  const inboxPageId = String(form.get("inbox_page_id") || "").trim();
+  const sig = String(form.get("sig") || "").trim();
+  const status = normalizeStatus(String(form.get("status") || "").trim());
+
+  if (!inboxPageId || !sig || !status) {
+    return new Response("inbox_page_id, status, and sig are required", { status: 400 });
+  }
+  if (!MOVE_CHOOSE_STATUS.includes(status)) {
+    return new Response("invalid status", { status: 400 });
+  }
+
+  const expectedSig = await createMoveChooseSignature(env.ACTION_SECRET, inboxPageId);
+  if (!safeEqual(expectedSig, sig)) {
+    return new Response("invalid signature", { status: 403 });
+  }
+
+  return handleMoveCore({
+    env,
+    pageId: inboxPageId,
+    status,
+    baseUrl: url.origin
+  });
 }
 
 async function handleMoveByBody(request, env) {
@@ -758,6 +815,62 @@ function normalizeStatus(s) {
 
 export function normalizeMoveStatus(value) {
   return normalizeStatus(value);
+}
+
+function buildMoveChooseHtml({ inboxPageId, sig }) {
+  const buttonHtml = MOVE_CHOOSE_STATUS.map(
+    (status) => `
+      <form method="POST" action="/move/choose" style="margin:0;">
+        <input type="hidden" name="inbox_page_id" value="${escapeHtmlAttr(inboxPageId)}">
+        <input type="hidden" name="sig" value="${escapeHtmlAttr(sig)}">
+        <input type="hidden" name="status" value="${escapeHtmlAttr(status)}">
+        <button type="submit" style="
+          width: 100%;
+          border: 1px solid #ddd;
+          border-radius: 8px;
+          background: #fff;
+          padding: 10px 12px;
+          text-align: left;
+          cursor: pointer;
+          font: inherit;
+        ">${status}</button>
+      </form>
+    `
+  ).join("");
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+</head>
+<body style="
+  font-family: ${UI_FONT_FAMILY};
+  background:#f7f7f7;
+  padding:16px;
+">
+  <div style="
+    background:#fff;
+    border-radius:12px;
+    padding:16px;
+    max-width:420px;
+  ">
+    <p style="margin:0 0 12px 0;">Move to Tasks DB:</p>
+    <div style="display:grid; gap:8px;">
+      ${buttonHtml}
+    </div>
+  </div>
+</body>
+</html>
+`;
+}
+
+function escapeHtmlAttr(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
 function coerceString(value) {

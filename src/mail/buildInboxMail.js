@@ -1,4 +1,6 @@
-export function buildInboxMail(inboxItems, origin) {
+import { createMoveChooseSignature } from "../utils/signature";
+
+export async function buildInboxMail(inboxItems, origin, actionSecret) {
   if (inboxItems.length === 0) {
     return `
 <!DOCTYPE html>
@@ -38,7 +40,14 @@ export function buildInboxMail(inboxItems, origin) {
 </p>
 `;
 
-  inboxItems.forEach((item, index) => {
+  for (const [index, item] of inboxItems.entries()) {
+    const sig =
+      actionSecret && item.id
+        ? await createMoveChooseSignature(actionSecret, item.id)
+        : "";
+    const chooseUrl = `${origin}/move/choose?inbox_page_id=${encodeURIComponent(item.id)}${
+      sig ? `&sig=${encodeURIComponent(sig)}` : ""
+    }`;
     body += `
 <div style="
   border: 1px solid #ddd;
@@ -55,12 +64,10 @@ export function buildInboxMail(inboxItems, origin) {
     作成日: ${item.created}
   </div>
 
-  <a href="${origin}/action/move?id=${item.id}&status=Do">▶ Do</a> /
-  <a href="${origin}/action/move?id=${item.id}&status=Someday">▶ Someday</a> /
-  <a href="${origin}/action/move?id=${item.id}&status=Drop">▶ Drop</a>
+  <a href="${chooseUrl}">▶ Move</a>
 </div>
 `;
-  });
+  }
 
   body += `
 </body>

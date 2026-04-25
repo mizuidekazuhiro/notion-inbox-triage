@@ -1,7 +1,7 @@
 import { runDailyInboxMail } from "./jobs/dailyInboxMail";
 import { runTasksDigestMail } from "./jobs/tasksDigestMail";
 import { handleInboxList, handleInboxShortcut, handleInboxHtml, handleMailContent, handleTasksDo, handleTasksDoWaiting, handleTasksSomeday, handleTasksDigestMail } from "./routes/inbox";
-import { handleMove } from "./routes/move";
+import { handleMove, handleMoveChoose } from "./routes/move";
 import { handleUndo } from "./routes/undo";
 import { handleConfirm, handleTaskUpdate } from "./routes/confirm";
 import { handleProjectsShortcut, handleProjectsChoices } from "./routes/projects";
@@ -82,6 +82,10 @@ export default {
 
     if (url.pathname === "/action/move") {
       return handleMove(request, env);
+    }
+
+    if (url.pathname === "/move/choose") {
+      return handleMoveChoose(request, env);
     }
 
     if (url.pathname === "/action/undo" || url.pathname === "/undo") {

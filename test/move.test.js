@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { handleMoveCore } from '../src/routes/move.js';
+import { handleMoveChoose, handleMoveCore } from '../src/routes/move.js';
+import { createMoveChooseSignature } from '../src/utils/signature.js';
 
 function jsonResponse(body, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -17,7 +18,8 @@ function textResponse(text, status = 200) {
 const env = {
   NOTION_TOKEN: 'secret',
   INBOX_DB_ID: 'inbox-db',
-  TASKS_DB_ID: 'tasks-db'
+  TASKS_DB_ID: 'tasks-db',
+  ACTION_SECRET: 'action-secret'
 };
 
 const basePage = {
@@ -135,6 +137,89 @@ test('handleMoveCore does not treat processing... with empty Processed At as Alr
       calls.some((call) => call.method === 'POST' && call.url.endsWith('/v1/pages')),
       'expected task creation request when retrying processing... state'
     );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('GET /move/choose returns status chooser for valid signature without moving', async () => {
+  const sig = await createMoveChooseSignature(env.ACTION_SECRET, 'inbox-page');
+  const request = new Request(`https://example.com/move/choose?inbox_page_id=inbox-page&sig=${sig}`);
+
+  const originalFetch = global.fetch;
+  let fetchCalled = false;
+  global.fetch = async () => {
+    fetchCalled = true;
+    throw new Error('fetch should not be called on chooser GET');
+  };
+
+  try {
+    const res = await handleMoveChoose(request, env);
+    const html = await res.text();
+
+    assert.equal(res.status, 200);
+    assert.equal(fetchCalled, false);
+    assert.match(html, /Do/);
+    assert.match(html, /Waiting/);
+    assert.match(html, /Someday/);
+    assert.match(html, /Thinking/);
+    assert.match(html, /Done/);
+    assert.match(html, /Drop/);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('GET /move/choose returns 403 for invalid signature', async () => {
+  const request = new Request('https://example.com/move/choose?inbox_page_id=inbox-page&sig=invalid');
+  const res = await handleMoveChoose(request, env);
+  assert.equal(res.status, 403);
+});
+
+test('POST /move/choose forwards selected status to handleMoveCore flow for all allowed statuses', async () => {
+  const originalFetch = global.fetch;
+  const seenStatuses = [];
+
+  global.fetch = async (url, options = {}) => {
+    const method = options.method || 'GET';
+    const urlString = String(url);
+    const body = options.body ? JSON.parse(options.body) : null;
+
+    if (urlString.endsWith('/v1/pages/inbox-page') && method === 'GET') return jsonResponse(basePage);
+    if (urlString.endsWith('/v1/databases/inbox-db')) return jsonResponse(inboxSchema);
+    if (urlString.endsWith('/v1/databases/tasks-db')) return jsonResponse(tasksSchema);
+    if (urlString.endsWith('/v1/pages/inbox-page') && method === 'PATCH') return jsonResponse({ ok: true });
+    if (urlString.endsWith('/v1/pages') && method === 'POST') {
+      seenStatuses.push(body?.properties?.Status?.select?.name);
+      return jsonResponse({ id: `task-${seenStatuses.length}`, properties: {} });
+    }
+    if (urlString.includes('/v1/blocks/inbox-page/children') && method === 'GET') {
+      return jsonResponse({ results: [], has_more: false, next_cursor: null });
+    }
+    if (urlString.includes('/v1/pages/task-') && method === 'PATCH') return jsonResponse({ ok: true });
+
+    throw new Error(`Unexpected fetch: ${method} ${urlString}`);
+  };
+
+  try {
+    const statuses = ['Do', 'Waiting', 'Someday', 'Thinking', 'Done', 'Drop'];
+    for (const status of statuses) {
+      const sig = await createMoveChooseSignature(env.ACTION_SECRET, 'inbox-page');
+      const body = new URLSearchParams({
+        inbox_page_id: 'inbox-page',
+        status,
+        sig
+      });
+      const req = new Request('https://example.com/move/choose', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body
+      });
+      const res = await handleMoveChoose(req, env);
+      assert.equal(res.status, 200);
+    }
+
+    assert.deepEqual(seenStatuses, statuses);
   } finally {
     global.fetch = originalFetch;
   }

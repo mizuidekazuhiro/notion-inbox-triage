@@ -1,6 +1,44 @@
 const DAY_MS = 24 * 60 * 60 * 1000;
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
+const EMAIL_FONT_STACK =
+  "'Yu Gothic UI', 'Yu Gothic', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', Meiryo, 'Segoe UI', -apple-system, BlinkMacSystemFont, Arial, sans-serif";
+
+const BODY_STYLE = `
+  margin:0;
+  padding:0;
+  background:#f4f5f7;
+  color:#202124;
+  font-family:${EMAIL_FONT_STACK};
+  font-size:15px;
+  line-height:1.75;
+  letter-spacing:0.01em;
+  -webkit-text-size-adjust:100%;
+  text-size-adjust:100%;
+`;
+
+const WRAPPER_STYLE = `
+  max-width:680px;
+  margin:0 auto;
+  padding:20px 14px 28px;
+`;
+
+const PANEL_STYLE = `
+  background:#ffffff;
+  border:1px solid #e6e8eb;
+  border-radius:16px;
+  padding:18px;
+  box-shadow:0 1px 2px rgba(0,0,0,0.04);
+`;
+
+const CARD_STYLE = `
+  border:1px solid #e6e8eb;
+  border-radius:14px;
+  background:#ffffff;
+  padding:16px;
+  margin:12px 0;
+`;
+
 function toJstDate(date) {
   return new Date(date.getTime() + JST_OFFSET_MS);
 }
@@ -48,13 +86,16 @@ function buildActionLinks({ baseUrl, id, status }) {
       return `
 <a href="${href}" style="
   display:inline-block;
-  margin: 6px 8px 0 0;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: #1a73e8;
-  color: #fff;
-  text-decoration: none;
-  font-size: 14px;
+  margin:8px 8px 0 0;
+  padding:8px 13px;
+  border-radius:9px;
+  background:#1a73e8;
+  color:#ffffff;
+  text-decoration:none;
+  font-family:${EMAIL_FONT_STACK};
+  font-size:14px;
+  font-weight:600;
+  line-height:1.35;
 ">${target}</a>`;
     })
     .join("");
@@ -70,30 +111,24 @@ function buildSection({
 }) {
   if (items.length === 0) {
     return `
-<h3 style="margin-top:24px;">${title}</h3>
-<p style="color:#666;">該当タスクはありません。</p>
+<h3 style="margin:26px 0 8px; font-size:18px; line-height:1.45; color:#202124;">${title}</h3>
+<p style="margin:0 0 12px; color:#5f6368; font-size:14px; line-height:1.7;">該当タスクはありません。</p>
 `;
   }
 
   return `
-<h3 style="margin-top:24px;">${title}（${items.length} 件）</h3>
+<h3 style="margin:26px 0 10px; font-size:18px; line-height:1.45; color:#202124;">${title}（${items.length} 件）</h3>
 ${items
   .map((item, index) => {
     const sinceValue = getSinceValue(item);
     const sinceLabel = getSinceLabel(item);
     const elapsed = calcElapsedDays(todayStart, sinceValue);
     return `
-<div style="
-  border:1px solid #e0e0e0;
-  border-radius:12px;
-  background:#fff;
-  padding:14px;
-  margin:12px 0;
-">
-  <div style="font-weight:600; font-size:16px; margin-bottom:6px;">${index + 1}. ${
+<div style="${CARD_STYLE}">
+  <div style="font-weight:700; font-size:16px; line-height:1.6; margin:0 0 6px; color:#202124;">${index + 1}. ${
       item.name
     }</div>
-  <div style="font-size:13px; color:#555; margin-bottom:8px;">
+  <div style="font-size:13px; color:#5f6368; line-height:1.6; margin:0 0 10px;">
     Priority: ${item.priority} / ${sinceLabel}: ${formatSince(sinceValue)} / 経過: ${elapsed} 日
   </div>
   <div>${buildActionLinks({ baseUrl, id: item.id, status: item.status })}</div>
@@ -127,37 +162,35 @@ export function buildTasksDigestMail({
 <html>
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
-<body style="
-  font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Hiragino Sans\", \"Yu Gothic\", Meiryo, Arial, sans-serif;
-  font-size:14px;
-  line-height:1.7;
-  color:#222222;
-  background:#f7f7f7;
-  padding:16px;
-">
-  <h2 style="margin-top:0;">🗂 Tasks Digest</h2>
-  <p style="color:#555;">${headerLines.join(" / ")}</p>
-  ${buildSection({
-    title: "Do/Waiting",
-    items: doWaitingItems,
-    getSinceLabel: (item) => item.digestSinceLabel || "Since",
-    getSinceValue: (item) => item.digestSinceISO || "",
-    todayStart,
-    baseUrl
-  })}
-  ${
-    weekStart
-      ? buildSection({
-          title: "Someday",
-          items: somedayItems,
-          getSinceLabel: () => "Since Someday",
-          getSinceValue: (item) => item.sinceSomedayISO || "",
-          todayStart,
-          baseUrl
-        })
-      : ""
-  }
+<body style="${BODY_STYLE}">
+  <div style="${WRAPPER_STYLE}">
+    <div style="${PANEL_STYLE}">
+      <h2 style="margin:0 0 8px; font-size:22px; line-height:1.4; color:#202124; letter-spacing:0.01em;">🗂 Tasks Digest</h2>
+      <p style="margin:0; color:#5f6368; font-size:14px; line-height:1.7;">${headerLines.join(" / ")}</p>
+    </div>
+    ${buildSection({
+      title: "Do/Waiting",
+      items: doWaitingItems,
+      getSinceLabel: (item) => item.digestSinceLabel || "Since",
+      getSinceValue: (item) => item.digestSinceISO || "",
+      todayStart,
+      baseUrl
+    })}
+    ${
+      weekStart
+        ? buildSection({
+            title: "Someday",
+            items: somedayItems,
+            getSinceLabel: () => "Since Someday",
+            getSinceValue: (item) => item.sinceSomedayISO || "",
+            todayStart,
+            baseUrl
+          })
+        : ""
+    }
+  </div>
 </body>
 </html>
 `;

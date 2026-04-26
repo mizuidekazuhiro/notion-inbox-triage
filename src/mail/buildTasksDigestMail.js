@@ -2,7 +2,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
 const EMAIL_FONT_STACK =
-  '"Yu Gothic UI", "Yu Gothic", "Hiragino Sans", "Hiragino Kaku Gothic ProN", Meiryo, "Segoe UI", -apple-system, BlinkMacSystemFont, Arial, sans-serif';
+  "'Yu Gothic UI', 'Yu Gothic', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', Meiryo, 'Segoe UI', -apple-system, BlinkMacSystemFont, Arial, sans-serif";
 
 const BODY_STYLE = `
   margin:0;

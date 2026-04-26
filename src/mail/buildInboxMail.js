@@ -1,7 +1,7 @@
 import { createMoveChooseSignature } from "../utils/signature";
 
 const EMAIL_FONT_STACK =
-  '"Yu Gothic UI", "Yu Gothic", "Hiragino Sans", "Hiragino Kaku Gothic ProN", Meiryo, "Segoe UI", -apple-system, BlinkMacSystemFont, Arial, sans-serif';
+  "Yu Gothic UI, Yu Gothic, Hiragino Sans, Hiragino Kaku Gothic ProN, Meiryo, Segoe UI, -apple-system, BlinkMacSystemFont, Arial, sans-serif";
 
 const BODY_STYLE = `
   margin:0;

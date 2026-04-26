@@ -47,6 +47,14 @@ const COPYABLE_PROPERTY_TYPES = new Set([
 ]);
 const RETRYABLE_PROCESSING_TEXT = "processing...";
 const MOVE_CHOOSE_STATUS = ["Do", "Waiting", "Someday", "Thinking", "Done", "Drop"];
+const MOVE_CHOOSE_STATUS_LABELS = {
+  Do: "実行する",
+  Waiting: "相手待ち",
+  Someday: "いつかやる",
+  Thinking: "考え中",
+  Done: "完了",
+  Drop: "やらない"
+};
 const UI_FONT_FAMILY =
   "'Yu Gothic UI','Yu Gothic','YuGothic','Hiragino Kaku Gothic ProN','Meiryo',Arial,sans-serif";
 
@@ -537,15 +545,27 @@ export async function handleMoveCore({
 <html>
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
 <body style="
-  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  margin:0;
+  font-family: ${UI_FONT_FAMILY};
+  color:#111827;
   background:#f7f7f7;
   padding:16px;
+  color-scheme: light;
 ">
-  <div style="background:#fff; border-radius:12px; padding:16px;">
-    <p style="margin:0 0 12px 0;">Moved to ${status}</p>
-    <p style="margin:0;">${undoLink}</p>
+  <div style="
+    background:#ffffff;
+    border-radius:12px;
+    padding:16px;
+    max-width:480px;
+    margin:0 auto;
+  ">
+    <p style="margin:0 0 12px 0; font-size:20px; font-weight:700; color:#111827;">処理しました</p>
+    <p style="margin:0 0 12px 0; color:#111827;">Moved to ${status}</p>
+    <p style="margin:0 0 12px 0;">${undoLink}</p>
+    <p style="margin:0; color:#111827;">画面を閉じてください</p>
   </div>
 </body>
 </html>
@@ -818,45 +838,62 @@ export function normalizeMoveStatus(value) {
 }
 
 function buildMoveChooseHtml({ inboxPageId, sig }) {
-  const buttonHtml = MOVE_CHOOSE_STATUS.map(
-    (status) => `
+  const buttonHtml = MOVE_CHOOSE_STATUS.map((status) => {
+    const description = MOVE_CHOOSE_STATUS_LABELS[status] || "";
+    return `
       <form method="POST" action="/move/choose" style="margin:0;">
         <input type="hidden" name="inbox_page_id" value="${escapeHtmlAttr(inboxPageId)}">
         <input type="hidden" name="sig" value="${escapeHtmlAttr(sig)}">
         <input type="hidden" name="status" value="${escapeHtmlAttr(status)}">
         <button type="submit" style="
-          width: 100%;
-          border: 1px solid #ddd;
-          border-radius: 8px;
-          background: #fff;
-          padding: 10px 12px;
-          text-align: left;
-          cursor: pointer;
-          font: inherit;
-        ">${status}</button>
+          width:100%;
+          border:1px solid #d1d5db;
+          border-radius:12px;
+          background:#ffffff;
+          color:#111827;
+          -webkit-text-fill-color:#111827;
+          font-size:16px;
+          line-height:1.4;
+          min-height:56px;
+          padding:14px 16px;
+          text-align:left;
+          cursor:pointer;
+          font-family:${UI_FONT_FAMILY};
+          box-sizing:border-box;
+        ">
+          <span style="display:block; font-weight:700; color:#111827; -webkit-text-fill-color:#111827;">${status}</span>
+          <span style="display:block; margin-top:2px; color:#374151; -webkit-text-fill-color:#374151; font-size:14px;">${description}</span>
+        </button>
       </form>
     `
-  ).join("");
+  }).join("");
 
   return `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
 <body style="
-  font-family: ${UI_FONT_FAMILY};
+  margin:0;
+  font-family:${UI_FONT_FAMILY};
+  color:#111827;
+  -webkit-text-fill-color:#111827;
   background:#f7f7f7;
   padding:16px;
+  color-scheme: light;
 ">
   <div style="
-    background:#fff;
+    background:#ffffff;
     border-radius:12px;
     padding:16px;
-    max-width:420px;
+    max-width:480px;
+    margin:0 auto;
+    box-sizing:border-box;
   ">
-    <p style="margin:0 0 12px 0;">Move to Tasks DB:</p>
-    <div style="display:grid; gap:8px;">
+    <p style="margin:0 0 12px 0; font-size:20px; font-weight:700; color:#111827; -webkit-text-fill-color:#111827;">このタスクの処理を選択</p>
+    <div style="display:grid; gap:10px;">
       ${buttonHtml}
     </div>
   </div>

@@ -165,9 +165,22 @@ test('GET /move/choose returns status chooser for valid signature without moving
     assert.match(html, /Thinking/);
     assert.match(html, /Done/);
     assert.match(html, /Drop/);
+    assert.match(html, /-webkit-text-fill-color:#111827/);
+    assert.match(html, /color:#111827/);
   } finally {
     global.fetch = originalFetch;
   }
+});
+
+test('GET /move/choose returns 400 when inbox_page_id or sig is missing', async () => {
+  const missingSig = new Request('https://example.com/move/choose?inbox_page_id=inbox-page');
+  const missingInboxPageId = new Request('https://example.com/move/choose?sig=test');
+
+  const resMissingSig = await handleMoveChoose(missingSig, env);
+  const resMissingInboxPageId = await handleMoveChoose(missingInboxPageId, env);
+
+  assert.equal(resMissingSig.status, 400);
+  assert.equal(resMissingInboxPageId.status, 400);
 });
 
 test('GET /move/choose returns 403 for invalid signature', async () => {
@@ -220,6 +233,96 @@ test('POST /move/choose forwards selected status to handleMoveCore flow for all 
     }
 
     assert.deepEqual(seenStatuses, statuses);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('POST /move/choose accepts status=Done', async () => {
+  const originalFetch = global.fetch;
+  const seenStatuses = [];
+
+  global.fetch = async (url, options = {}) => {
+    const method = options.method || 'GET';
+    const urlString = String(url);
+    const body = options.body ? JSON.parse(options.body) : null;
+
+    if (urlString.endsWith('/v1/pages/inbox-page') && method === 'GET') return jsonResponse(basePage);
+    if (urlString.endsWith('/v1/databases/inbox-db')) return jsonResponse(inboxSchema);
+    if (urlString.endsWith('/v1/databases/tasks-db')) return jsonResponse(tasksSchema);
+    if (urlString.endsWith('/v1/pages/inbox-page') && method === 'PATCH') return jsonResponse({ ok: true });
+    if (urlString.endsWith('/v1/pages') && method === 'POST') {
+      seenStatuses.push(body?.properties?.Status?.select?.name);
+      return jsonResponse({ id: 'task-done', properties: {} });
+    }
+    if (urlString.includes('/v1/blocks/inbox-page/children') && method === 'GET') {
+      return jsonResponse({ results: [], has_more: false, next_cursor: null });
+    }
+    if (urlString.includes('/v1/pages/task-') && method === 'PATCH') return jsonResponse({ ok: true });
+
+    throw new Error(`Unexpected fetch: ${method} ${urlString}`);
+  };
+
+  try {
+    const sig = await createMoveChooseSignature(env.ACTION_SECRET, 'inbox-page');
+    const body = new URLSearchParams({
+      inbox_page_id: 'inbox-page',
+      status: 'Done',
+      sig
+    });
+    const req = new Request('https://example.com/move/choose', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body
+    });
+    const res = await handleMoveChoose(req, env);
+    assert.equal(res.status, 200);
+    assert.deepEqual(seenStatuses, ['Done']);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('POST /move/choose accepts status=Drop', async () => {
+  const originalFetch = global.fetch;
+  const seenStatuses = [];
+
+  global.fetch = async (url, options = {}) => {
+    const method = options.method || 'GET';
+    const urlString = String(url);
+    const body = options.body ? JSON.parse(options.body) : null;
+
+    if (urlString.endsWith('/v1/pages/inbox-page') && method === 'GET') return jsonResponse(basePage);
+    if (urlString.endsWith('/v1/databases/inbox-db')) return jsonResponse(inboxSchema);
+    if (urlString.endsWith('/v1/databases/tasks-db')) return jsonResponse(tasksSchema);
+    if (urlString.endsWith('/v1/pages/inbox-page') && method === 'PATCH') return jsonResponse({ ok: true });
+    if (urlString.endsWith('/v1/pages') && method === 'POST') {
+      seenStatuses.push(body?.properties?.Status?.select?.name);
+      return jsonResponse({ id: 'task-drop', properties: {} });
+    }
+    if (urlString.includes('/v1/blocks/inbox-page/children') && method === 'GET') {
+      return jsonResponse({ results: [], has_more: false, next_cursor: null });
+    }
+    if (urlString.includes('/v1/pages/task-') && method === 'PATCH') return jsonResponse({ ok: true });
+
+    throw new Error(`Unexpected fetch: ${method} ${urlString}`);
+  };
+
+  try {
+    const sig = await createMoveChooseSignature(env.ACTION_SECRET, 'inbox-page');
+    const body = new URLSearchParams({
+      inbox_page_id: 'inbox-page',
+      status: 'Drop',
+      sig
+    });
+    const req = new Request('https://example.com/move/choose', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body
+    });
+    const res = await handleMoveChoose(req, env);
+    assert.equal(res.status, 200);
+    assert.deepEqual(seenStatuses, ['Drop']);
   } finally {
     global.fetch = originalFetch;
   }

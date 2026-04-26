@@ -175,6 +175,12 @@ GET /action/move?id=<inbox_page_id>&status=Do
 
 日付は ISO 文字列や Date 文字列でも受け付け、JST 基準で `YYYY-MM-DD` に正規化して Notion に渡します。正規化できない場合は該当プロパティ更新をスキップします。
 
+### ステータス選択画面（`/move/choose`）
+- `/move/choose` は Inbox page を Tasks DB に移すためのステータス選択画面です。
+- 選択肢は `Do` / `Waiting` / `Someday` / `Thinking` / `Done` / `Drop` です。
+- URL には `inbox_page_id` と `sig` が必要です。
+- `sig` は `ACTION_SECRET` による HMAC-SHA256 署名です。
+
 ### Inbox → Tasks のプロパティ転記ルール
 - Inbox ページ取得後、Inbox DB / Tasks DB のスキーマを参照し、**Tasks DB 側に同名かつ型互換のあるプロパティ**だけを自動転記します。
 - title は Inbox 側の title プロパティ（通常は `Name`）から、Tasks DB 側の title プロパティ（通常は `名前`）へ、**固定名に依存せず title type を検出して**コピーします。

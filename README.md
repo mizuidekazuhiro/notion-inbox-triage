@@ -21,6 +21,7 @@ Workers の HTTP エンドポイントを提供し、以下の用途を担いま
 - `/test/token`：環境変数のトークン確認
 - `/api/inbox`：Inbox の JSON 取得
 - `/api/inbox/shortcut`：ショートカット向けの choices 取得
+- `/api/widget/inbox`：iPhone ウィジェット向け Inbox 軽量 JSON（SHORTCUT_TOKEN 必須）
 - `/api/projects/shortcut`：Projects DB の choices 取得
 - `/api/projects/choices`：iOSショートカット高速化用の Projects choices 取得
 - `/inbox`：Inbox HTML
@@ -145,6 +146,81 @@ Projects の選択肢は、辞書参照を避けるため `/api/projects/choices
 2. **辞書から値を取得**: レスポンスの `choices` 配列を取り出す
 3. **リストから選択**: `choices` をリストとして表示（表示名は `label`）
 4. **値の取得**: 選択された項目の `value` を `project_id` として後続の `/action/move` に渡す
+
+## iPhoneウィジェット表示（Scriptable）
+### 前提
+- Cloudflare Workers にデプロイ済み
+- `SHORTCUT_TOKEN` を Workers 環境変数に設定済み
+- iPhone に Scriptable アプリをインストール済み
+
+### Workers URL 例
+```text
+https://<worker-domain>/api/widget/inbox?limit=5&token=<SHORTCUT_TOKEN>
+```
+
+- `GET /api/widget/inbox` は `SHORTCUT_TOKEN` 必須です（未設定時は 500）。
+- 認証は `X-Shortcut-Token` ヘッダーまたは `?token=` クエリに対応しています。
+- `limit` は 1〜10 に丸められ、未指定時は 5 件です。
+
+### Scriptable に貼り付けるサンプルコード
+```javascript
+const WORKER_URL = "https://<worker-domain>/api/widget/inbox?limit=5";
+const TOKEN = "<SHORTCUT_TOKEN>";
+
+const widget = new ListWidget();
+widget.setPadding(12, 12, 12, 12);
+
+const title = widget.addText("Inbox");
+title.font = Font.boldSystemFont(16);
+
+widget.addSpacer(6);
+
+try {
+  const req = new Request(WORKER_URL);
+  req.headers = { "X-Shortcut-Token": TOKEN };
+  const data = await req.loadJSON();
+
+  const countText = widget.addText(`${data.count ?? 0}件`);
+  countText.font = Font.systemFont(12);
+
+  widget.addSpacer(6);
+
+  const items = data.items ?? [];
+  if (items.length === 0) {
+    const empty = widget.addText("未処理タスクはありません");
+    empty.font = Font.systemFont(13);
+  } else {
+    for (let i = 0; i < Math.min(items.length, 5); i++) {
+      const line = widget.addText(`${i + 1}. ${items[i].title}`);
+      line.font = Font.systemFont(12);
+      line.lineLimit = 1;
+    }
+  }
+
+  widget.addSpacer(6);
+  const updated = widget.addText(`更新 ${new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}`);
+  updated.font = Font.systemFont(10);
+
+} catch (e) {
+  const error = widget.addText("Inbox取得エラー");
+  error.font = Font.systemFont(13);
+}
+
+Script.setWidget(widget);
+Script.complete();
+```
+
+### ホーム画面に Scriptable ウィジェットを追加する手順
+1. Scriptable で新規スクリプトを作成し、上記コードを貼り付けて保存
+2. iPhone ホーム画面を長押しし、ウィジェット追加画面を開く
+3. Scriptable ウィジェットを選択し、任意サイズでホーム画面に配置
+4. 追加したウィジェットを長押し →「ウィジェットを編集」
+5. Script で作成したスクリプト名を選択して保存
+
+### 注意点
+- iOS ウィジェットはリアルタイム更新ではありません
+- 更新頻度は iOS 側の制御に依存します
+- タスクの詳細確認や振り分けは既存の `/inbox` または `/move/choose` を利用してください
 
 ## Inbox → Tasks 移動（/action/move）
 ### GET（従来互換）

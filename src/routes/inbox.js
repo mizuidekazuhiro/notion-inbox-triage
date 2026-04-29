@@ -1,9 +1,9 @@
-import { fetchInbox } from "../notion/inbox";
-import { jsonResponse } from "../utils/http";
-import { buildDoWaitingItems, sortTasksBySince, startOfJstDay } from "../utils/tasksDigest";
-import { queryDoWaitingTasks, queryTasksByStatus } from "../notion/tasks";
-import { buildInboxMail } from "../mail/buildInboxMail";
-import { buildTasksDigestData } from "./tasksDigest";
+import { fetchInbox } from "../notion/inbox.js";
+import { jsonResponse } from "../utils/http.js";
+import { buildDoWaitingItems, sortTasksBySince, startOfJstDay } from "../utils/tasksDigest.js";
+import { queryDoWaitingTasks, queryTasksByStatus } from "../notion/tasks.js";
+import { buildInboxMail } from "../mail/buildInboxMail.js";
+import { buildTasksDigestData } from "./tasksDigest.js";
 
 export async function handleInboxList(request, env) {
   return inboxList(request, env);
@@ -85,6 +85,70 @@ export async function handleInboxShortcut(request, env) {
       "Cache-Control": "no-store"
     }
   });
+}
+
+export async function handleWidgetInbox(request, env) {
+  const shortcutToken = env.SHORTCUT_TOKEN;
+  if (!shortcutToken) {
+    return new Response(JSON.stringify({ ok: false, error: "shortcut_token_not_configured" }), {
+      status: 500,
+      headers: {
+        "Content-Type": "application/json; charset=UTF-8",
+        "Cache-Control": "no-store"
+      }
+    });
+  }
+
+  const url = new URL(request.url);
+  const headerToken = request.headers.get("X-Shortcut-Token");
+  const queryToken = url.searchParams.get("token");
+  const providedToken = headerToken || queryToken;
+
+  if (providedToken !== shortcutToken) {
+    return new Response(JSON.stringify({ ok: false, error: "unauthorized" }), {
+      status: 401,
+      headers: {
+        "Content-Type": "application/json; charset=UTF-8",
+        "Cache-Control": "no-store"
+      }
+    });
+  }
+
+  const rawLimit = Number.parseInt(url.searchParams.get("limit") ?? "5", 10);
+  const limit = Math.min(10, Math.max(1, Number.isNaN(rawLimit) ? 5 : rawLimit));
+
+  try {
+    const inbox = await fetchInbox(env);
+    const items = inbox.slice(0, limit).map((item) => ({
+      id: item.id,
+      title: item.title || "(No title)",
+      created: item.created || ""
+    }));
+
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        generated_at: new Date().toISOString(),
+        count: items.length,
+        items
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json; charset=UTF-8",
+          "Cache-Control": "no-store"
+        }
+      }
+    );
+  } catch (error) {
+    console.error("handleWidgetInbox failed", error?.stack || error);
+    return new Response(JSON.stringify({ ok: false, error: "failed_to_fetch_inbox" }), {
+      status: 500,
+      headers: {
+        "Content-Type": "application/json; charset=UTF-8",
+        "Cache-Control": "no-store"
+      }
+    });
+  }
 }
 
 export async function handleInboxHtml(request, env) {

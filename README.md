@@ -356,3 +356,90 @@ GET /test/email-to-inbox?subject=Hello&body=Test
 ```
 GET /test/inbox/create?subject=Hello&body=Test
 ```
+
+## iPhone ScriptableウィジェットでInboxを見る
+
+### 1) Workers 側の設定
+- Cloudflare Workers の環境変数に `SHORTCUT_TOKEN` を設定します。
+- `/api/widget/inbox` は `X-Shortcut-Token` ヘッダーで認証します。
+
+### 2) iPhone 側の準備
+1. iPhone に Scriptable アプリをインストールする
+2. Scriptable で新規 Script を作成する
+3. 下記コードを貼り付ける
+4. `API_URL` を自分の Workers URL に変更する
+5. `TOKEN` に Workers の `SHORTCUT_TOKEN` と同じ値を設定する
+6. ホーム画面に Scriptable ウィジェットを追加する
+
+- Widget Parameter は不要です。
+- 更新間隔は Scriptable / iOS 側の制約を受けるため、厳密に 10 分ごとではありません。
+
+### 完成版 Scriptable コード
+```javascript
+const API_URL = "https://notion-inbox-triage.kazuhiro-mizuide.workers.dev/api/widget/inbox?limit=5";
+const TOKEN = "ここにSHORTCUT_TOKENを入れる";
+
+const widget = new ListWidget();
+widget.setPadding(12, 12, 12, 12);
+widget.refreshAfterDate = new Date(Date.now() + 10 * 60 * 1000);
+
+const title = widget.addText("Inbox");
+title.font = Font.boldSystemFont(16);
+
+widget.addSpacer(6);
+
+try {
+  const req = new Request(API_URL);
+  req.headers = {
+    "X-Shortcut-Token": TOKEN
+  };
+
+  const data = await req.loadJSON();
+
+  if (data.ok === false) {
+    throw new Error(data.error || "api_error");
+  }
+
+  const count = data.count ?? 0;
+  const items = data.items ?? [];
+
+  const countText = widget.addText(`${count}件`);
+  countText.font = Font.systemFont(12);
+
+  widget.addSpacer(6);
+
+  if (items.length === 0) {
+    const empty = widget.addText("未処理タスクはありません");
+    empty.font = Font.systemFont(13);
+  } else {
+    for (let i = 0; i < Math.min(items.length, 5); i++) {
+      const line = widget.addText(`${i + 1}. ${items[i].title || "無題"}`);
+      line.font = Font.systemFont(12);
+      line.lineLimit = 1;
+    }
+  }
+
+  widget.addSpacer(6);
+
+  const updated = widget.addText(
+    `更新 ${new Date().toLocaleTimeString("ja-JP", {
+      hour: "2-digit",
+      minute: "2-digit"
+    })}`
+  );
+  updated.font = Font.systemFont(10);
+
+} catch (e) {
+  const error = widget.addText("Inbox取得エラー");
+  error.font = Font.systemFont(13);
+
+  widget.addSpacer(4);
+
+  const detail = widget.addText(String(e.message || e));
+  detail.font = Font.systemFont(9);
+  detail.lineLimit = 2;
+}
+
+Script.setWidget(widget);
+Script.complete();
+```

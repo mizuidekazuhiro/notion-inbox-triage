@@ -1,5 +1,5 @@
-import { getTask, updateTaskStatus } from "../notion/tasks.js";
-import { createActionSignature, safeEqual } from "../utils/signature.js";
+import { getTask, updateTaskStatus } from "../notion/tasks";
+import { createActionSignature, safeEqual } from "../utils/signature";
 
 const ALLOWED_ACTION_STATUS = ["Do", "Thinking", "Waiting", "Done", "Drop", "Someday"];
 

@@ -133,6 +133,13 @@ export async function handleMoveChoose(request, env) {
 }
 
 async function handleMoveByBody(request, env) {
+  if (env.SHORTCUT_TOKEN) {
+    const token = request.headers.get("X-Shortcut-Token");
+    if (token !== env.SHORTCUT_TOKEN) {
+      return new Response("Forbidden", { status: 403 });
+    }
+  }
+
   if (request.method !== "POST") {
     return new Response("Method Not Allowed", { status: 405 });
   }

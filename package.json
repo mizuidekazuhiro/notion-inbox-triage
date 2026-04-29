@@ -3,7 +3,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test",
     "send:digest": "node scripts/send_digest_smtp.mjs"
   },
   "dependencies": {

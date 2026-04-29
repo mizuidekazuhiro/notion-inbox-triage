@@ -60,7 +60,7 @@ Cron / scheduled 実行の入口です。`runDailyInboxMail` を呼び出しま�
 - `ACTION_SECRET`（Confirm/Undo 署名用の秘密鍵）
 
 ### 任意
-- `SHORTCUT_TOKEN`（任意。ただし /api/widget/inbox を使う場合は必須）
+- `SHORTCUT_TOKEN`（ショートカット API の認証）
 - `BASE_URL`（未設定の場合はリクエスト URL を使用）
 - `INBOX_SOURCE_VALUE`（未設定なら "Email"）
 
@@ -137,13 +137,6 @@ Workers と GitHub Actions は **同じ UTC cron** に統一しています（JS
 2. Notion API トークンと DB ID を設定
 3. 各エンドポイントを用途に応じて呼び出す
 
-## iOSショートカット認証方針
-- `GET /api/inbox/shortcut` は token 不要
-- `GET /api/projects/shortcut` は token 不要
-- `GET /api/projects/choices` は token 不要
-- `POST /action/move` は token 不要（`Content-Type: application/json` のみ）
-- `SHORTCUT_TOKEN` を使うのは `GET /api/widget/inbox` のみ
-
 ## iOSショートカット高速化（Projects choices）
 Projects の選択肢は、辞書参照を避けるため `/api/projects/choices` を使うのが推奨です。
 従来の `/api/projects/shortcut` は互換性維持のため残してあり、既存ショートカットはそのまま動きます。
@@ -168,23 +161,6 @@ https://<worker-domain>/api/widget/inbox?limit=5&token=<SHORTCUT_TOKEN>
 - `GET /api/widget/inbox` は `SHORTCUT_TOKEN` 必須です（未設定時は 500）。
 - 認証は `X-Shortcut-Token` ヘッダーまたは `?token=` クエリに対応しています。
 - `limit` は 1〜10 に丸められ、未指定時は 5 件です。
-
-### Scriptable サンプル（クエリ方式）
-```javascript
-const WORKER_URL = "https://<worker-domain>/api/widget/inbox?limit=5&token=<SHORTCUT_TOKEN>";
-const req = new Request(WORKER_URL);
-const data = await req.loadJSON();
-```
-
-### Scriptable サンプル（ヘッダー方式）
-```javascript
-const WORKER_URL = "https://<worker-domain>/api/widget/inbox?limit=5";
-const TOKEN = "<SHORTCUT_TOKEN>";
-
-const req = new Request(WORKER_URL);
-req.headers = { "X-Shortcut-Token": TOKEN };
-const data = await req.loadJSON();
-```
 
 ### Scriptable に貼り付けるサンプルコード
 ```javascript
@@ -303,6 +279,7 @@ GET /action/move?id=<inbox_page_id>&status=Do
 
 ```bash
 curl -X POST "$WORKERS_ENDPOINT/action/move" \
+  -H "X-Shortcut-Token: <SHORTCUT_TOKEN>" \
   -H "X-Debug: 1" \
   -H "Content-Type: application/json" \
   -d '{"id":"...","status":"Do"}'

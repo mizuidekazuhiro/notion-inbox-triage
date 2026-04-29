@@ -1,1 +1,1 @@
-export { notionHeaders } from "./client.js";
+export { notionHeaders } from "./client";

@@ -1,6 +1,6 @@
 import { runDailyInboxMail } from "./jobs/dailyInboxMail";
 import { runTasksDigestMail } from "./jobs/tasksDigestMail";
-import { handleInboxList, handleInboxShortcut, handleInboxHtml, handleMailContent, handleTasksDo, handleTasksDoWaiting, handleTasksSomeday, handleTasksDigestMail } from "./routes/inbox";
+import { handleInboxList, handleInboxShortcut, handleWidgetInbox, handleInboxHtml, handleMailContent, handleTasksDo, handleTasksDoWaiting, handleTasksSomeday, handleTasksDigestMail } from "./routes/inbox";
 import { handleMove, handleMoveChoose } from "./routes/move";
 import { handleUndo } from "./routes/undo";
 import { handleConfirm, handleTaskUpdate } from "./routes/confirm";
@@ -27,6 +27,10 @@ export default {
 
     if (url.pathname === "/api/inbox/shortcut") {
       return handleInboxShortcut(request, env);
+    }
+
+    if (url.pathname === "/api/widget/inbox") {
+      return handleWidgetInbox(request, env);
     }
 
     if (url.pathname === "/api/projects/shortcut") {

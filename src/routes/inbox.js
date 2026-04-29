@@ -1,9 +1,9 @@
-import { fetchInbox } from "../notion/inbox";
-import { jsonResponse } from "../utils/http";
-import { buildDoWaitingItems, sortTasksBySince, startOfJstDay } from "../utils/tasksDigest";
-import { queryDoWaitingTasks, queryTasksByStatus } from "../notion/tasks";
-import { buildInboxMail } from "../mail/buildInboxMail";
-import { buildTasksDigestData } from "./tasksDigest";
+import { fetchInbox, fetchWidgetInbox } from "../notion/inbox.js";
+import { jsonResponse } from "../utils/http.js";
+import { buildDoWaitingItems, sortTasksBySince, startOfJstDay } from "../utils/tasksDigest.js";
+import { queryDoWaitingTasks, queryTasksByStatus } from "../notion/tasks.js";
+import { buildInboxMail } from "../mail/buildInboxMail.js";
+import { buildTasksDigestData } from "./tasksDigest.js";
 
 export async function handleInboxList(request, env) {
   return inboxList(request, env);
@@ -146,4 +146,35 @@ export async function handleTasksDigestMail(request, env) {
   });
 
   return jsonResponse(result);
+}
+
+function parseWidgetLimit(request) {
+  const url = new URL(request.url);
+  const raw = Number.parseInt(url.searchParams.get("limit") || "5", 10);
+  if (!Number.isFinite(raw) || raw <= 0) return 5;
+  return Math.min(raw, 50);
+}
+
+export async function handleWidgetInbox(request, env) {
+  const limit = parseWidgetLimit(request);
+
+  if (!env.SHORTCUT_TOKEN) {
+    console.log(JSON.stringify({ event: "widget_inbox_request", limit, success: false, count: 0, error: "shortcut_token_missing" }));
+    return jsonResponse({ ok: false, error: "shortcut_token_missing" }, 500);
+  }
+
+  const token = request.headers.get("X-Shortcut-Token");
+  if (!token || token !== env.SHORTCUT_TOKEN) {
+    console.log(JSON.stringify({ event: "widget_inbox_request", limit, success: false, count: 0, error: "unauthorized" }));
+    return jsonResponse({ ok: false, error: "unauthorized" }, 401);
+  }
+
+  try {
+    const { count, items } = await fetchWidgetInbox(env, limit);
+    console.log(JSON.stringify({ event: "widget_inbox_request", limit, success: true, count }));
+    return jsonResponse({ ok: true, count, items });
+  } catch (error) {
+    console.log(JSON.stringify({ event: "widget_inbox_request", limit, success: false, count: 0, error: error?.message || "notion_error" }));
+    return jsonResponse({ ok: false, error: "notion_error" }, 502);
+  }
 }

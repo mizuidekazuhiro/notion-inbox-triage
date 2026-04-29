@@ -1,12 +1,12 @@
-import { queryDoWaitingTasks, queryTasksByStatus } from "../notion/tasks";
-import { buildTasksDigestMail } from "../mail/buildTasksDigestMail";
+import { queryDoWaitingTasks, queryTasksByStatus } from "../notion/tasks.js";
+import { buildTasksDigestMail } from "../mail/buildTasksDigestMail.js";
 import {
   buildDoWaitingItems,
   getJstDateString,
   isFirstBusinessDayOfWeek,
   sortTasksBySince,
   startOfJstDay
-} from "../utils/tasksDigest";
+} from "../utils/tasksDigest.js";
 
 export async function buildTasksDigestData({ env, baseUrl }) {
   const todayStart = startOfJstDay(new Date());

@@ -1,4 +1,4 @@
-import { notionHeaders } from "../notion/client";
+import { notionHeaders } from "../notion/client.js";
 
 class ProjectsFetchError extends Error {
   constructor(message, notionStatus, notionErrorExcerpt) {

@@ -1,4 +1,4 @@
-import { createMoveChooseSignature } from "../utils/signature";
+import { createMoveChooseSignature } from "../utils/signature.js";
 
 const EMAIL_FONT_STACK =
   "Yu Gothic UI, Yu Gothic, Hiragino Sans, Hiragino Kaku Gothic ProN, Meiryo, Segoe UI, -apple-system, BlinkMacSystemFont, Arial, sans-serif";

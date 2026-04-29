@@ -1,13 +1,13 @@
-import { runDailyInboxMail } from "./jobs/dailyInboxMail";
-import { runTasksDigestMail } from "./jobs/tasksDigestMail";
-import { handleInboxList, handleInboxShortcut, handleWidgetInbox, handleInboxHtml, handleMailContent, handleTasksDo, handleTasksDoWaiting, handleTasksSomeday, handleTasksDigestMail } from "./routes/inbox";
-import { handleMove, handleMoveChoose } from "./routes/move";
-import { handleUndo } from "./routes/undo";
-import { handleConfirm, handleTaskUpdate } from "./routes/confirm";
-import { handleProjectsShortcut, handleProjectsChoices } from "./routes/projects";
-import { sanitizeSubject, readMessageBody } from "./email/parseEmail";
-import { createInboxItem } from "./notion/inboxCreate";
-import { jsonResponse } from "./utils/http";
+import { runDailyInboxMail } from "./jobs/dailyInboxMail.js";
+import { runTasksDigestMail } from "./jobs/tasksDigestMail.js";
+import { handleInboxList, handleInboxShortcut, handleWidgetInbox, handleInboxHtml, handleMailContent, handleTasksDo, handleTasksDoWaiting, handleTasksSomeday, handleTasksDigestMail } from "./routes/inbox.js";
+import { handleMove, handleMoveChoose } from "./routes/move.js";
+import { handleUndo } from "./routes/undo.js";
+import { handleConfirm, handleTaskUpdate } from "./routes/confirm.js";
+import { handleProjectsShortcut, handleProjectsChoices } from "./routes/projects.js";
+import { sanitizeSubject, readMessageBody } from "./email/parseEmail.js";
+import { createInboxItem } from "./notion/inboxCreate.js";
+import { jsonResponse } from "./utils/http.js";
 
 export default {
   async fetch(request, env, ctx) {

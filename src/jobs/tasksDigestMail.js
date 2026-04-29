@@ -1,4 +1,4 @@
-import { buildTasksDigestData } from "../routes/tasksDigest";
+import { buildTasksDigestData } from "../routes/tasksDigest.js";
 
 export async function runTasksDigestMail(env) {
   const result = await buildTasksDigestData({

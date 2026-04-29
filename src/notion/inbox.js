@@ -1,4 +1,4 @@
-import { notionHeaders } from "./client";
+import { notionHeaders } from "./client.js";
 
 export async function fetchInbox(env) {
   const res = await fetch(

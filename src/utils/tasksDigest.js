@@ -5,7 +5,7 @@ import {
   isFirstBusinessDayOfWeek,
   parseJstDateStart,
   startOfJstDay
-} from "./date";
+} from "./date.js";
 
 function isWaitingReminderDue(item, todayStart) {
   if (!item.reminderDateISO) return false;

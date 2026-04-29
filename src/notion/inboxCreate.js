@@ -1,5 +1,5 @@
-import { chunkToRichTextBlocks } from "../email/parseEmail";
-import { notionHeaders } from "./notionHeaders";
+import { chunkToRichTextBlocks } from "../email/parseEmail.js";
+import { notionHeaders } from "./notionHeaders.js";
 
 export async function createInboxItem(env, { subject, rawText, receivedIso }) {
   if (!env.NOTION_TOKEN) {

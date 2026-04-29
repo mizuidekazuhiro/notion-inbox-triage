@@ -1,5 +1,5 @@
-import { notionHeaders } from "../notion/client";
-import { createUndoSignature, safeEqual } from "../utils/signature";
+import { notionHeaders } from "../notion/client.js";
+import { createUndoSignature, safeEqual } from "../utils/signature.js";
 
 export async function handleUndo(url, env) {
   const taskId = url.searchParams.get("task_id");

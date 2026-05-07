@@ -64,6 +64,7 @@ export function buildIcs({ uid, summary, description, startIso, endIso, timezone
     `DTSTAMP:${dtStamp}`,
     `DTSTART:${fmtLocal(startIso)}`,
     `DTEND:${fmtLocal(endIso)}`,
+    'CLASS:PRIVATE',
     `SUMMARY:${escape(summary)}`,
     `DESCRIPTION:${escape(description)}`,
     url ? `URL:${escape(url)}` : null,

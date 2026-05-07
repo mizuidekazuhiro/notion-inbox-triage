@@ -30,6 +30,8 @@ export function isSchedulerTarget({ page, props, doneValue, now = new Date() }) 
   const eventDate = p[props.eventDate]?.date;
   const sendScheduler = p[props.sendScheduler]?.checkbox === true;
   const sentAt = p[props.sentAt]?.date?.start;
+  const uidText = (p[props.uid]?.rich_text || []).map((x) => x.plain_text || '').join('').trim();
+  const errText = (p[props.error]?.rich_text || []).map((x) => x.plain_text || '').join('').trim();
 
   const statusValue = status?.status?.name || status?.select?.name || '';
   if (statusValue !== doneValue) return { ok: false, reason: 'status_not_done' };
@@ -39,6 +41,7 @@ export function isSchedulerTarget({ page, props, doneValue, now = new Date() }) 
   if (new Date(event.start).getTime() <= now.getTime()) return { ok: false, reason: 'event_not_future' };
   if (!sendScheduler) return { ok: false, reason: 'send_scheduler_not_true' };
   if (sentAt) return { ok: false, reason: 'already_sent' };
+  if (uidText && /^(sending|email_sent_but_notion_update_failed|possible_already_sent)/i.test(errText)) return { ok: false, reason: 'possible_already_sent' };
   return { ok: true, event };
 }
 

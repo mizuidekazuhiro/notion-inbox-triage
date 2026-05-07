@@ -447,17 +447,32 @@ Script.complete();
 ## Task Event Scheduler（Done未来予定の .ics 送信）
 
 ### 機能概要
-Tasks DB で `Status=Done` かつ未来 `Event Date` のタスクを検知し、`Send Scheduler=true` かつ `Scheduler Sent At` 空の場合のみ、会社メールへ `.ics` 招待メールを送信します。
+Tasks DB で `Status=Done` かつ未来 `Event Date` のタスクを検知し、`Send Scheduler` を「スケジューラー送信済みフラグ」として扱って会社メールへ `.ics` 招待メールを送信します（未送信タスクのみ送信）。
 
 ### 対象条件
 - Status = Done
 - Event Date が未来
-- Send Scheduler = true
+- Send Scheduler = 未チェック（false）
 - Scheduler Sent At が空
+- Scheduler Error が `sending` / `email_sent_but_notion_update_failed` / `possible_already_sent` 系ではない
+
+### 送信成功後の更新
+- Send Scheduler = チェックあり（true）
+- Scheduler Sent At = 送信時刻
+- Scheduler UID = uid
+- Scheduler Error = 空
+
+### 送信失敗時の更新
+- Send Scheduler = 未チェックのまま（false）
+- Scheduler Sent At = 空のまま
+- Scheduler UID = uid
+- Scheduler Error = エラー内容
 
 ### Notionに必要なプロパティ
 - Event Date（date）
 - Send Scheduler（checkbox）
+  - 未チェック: 未送信
+  - チェックあり: 送信済み
 - Scheduler Sent At（date）
 - Scheduler UID（rich_text）
 - Scheduler Error（rich_text）

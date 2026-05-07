@@ -41,7 +41,7 @@ export function validateRequiredProperties(db, props) {
   }
 }
 
-async function processPage({ page, now, lookahead, durationMin, props, doneValue, notion, transporter, mail }) {
+export async function processPage({ page, now, lookahead, durationMin, props, doneValue, notion, transporter, mail }) {
   const target = isSchedulerTarget({ page, props, doneValue, now });
   if (!target.ok) return { type: 'skip', reason: target.reason };
 
@@ -71,7 +71,7 @@ async function processPage({ page, now, lookahead, durationMin, props, doneValue
   }
 
   try {
-    await notion.pages.update({ page_id: page.id, properties: { [props.sentAt]: { date: { start: new Date().toISOString() } }, [props.uid]: rt(uid), [props.error]: rt('') } });
+    await notion.pages.update({ page_id: page.id, properties: { [props.sendScheduler]: { checkbox: true }, [props.sentAt]: { date: { start: new Date().toISOString() } }, [props.uid]: rt(uid), [props.error]: rt('') } });
     return { type: 'sent', pageId: page.id, title, eventStart: event.start, eventEnd: event.end, uid, notionUrl, inferredFromDateOnly: event.inferredFromDateOnly };
   } catch (e) {
     const marker = `email_sent_but_notion_update_failed: ${String(e?.message || e).slice(0, 1200)}`;

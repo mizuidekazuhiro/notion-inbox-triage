@@ -28,7 +28,7 @@ export function isSchedulerTarget({ page, props, doneValue, now = new Date() }) 
   const p = page.properties || {};
   const status = p[props.status];
   const eventDate = p[props.eventDate]?.date;
-  const sendScheduler = p[props.sendScheduler]?.checkbox === true;
+  const sendSchedulerChecked = p[props.sendScheduler]?.checkbox === true;
   const sentAt = p[props.sentAt]?.date?.start;
   const uidText = (p[props.uid]?.rich_text || []).map((x) => x.plain_text || '').join('').trim();
   const errText = (p[props.error]?.rich_text || []).map((x) => x.plain_text || '').join('').trim();
@@ -39,7 +39,7 @@ export function isSchedulerTarget({ page, props, doneValue, now = new Date() }) 
   const event = resolveEventWindow({ notionDate: eventDate, defaultDurationMin: 180, now });
   if (!event) return { ok: false, reason: 'event_date_empty' };
   if (new Date(event.start).getTime() <= now.getTime()) return { ok: false, reason: 'event_not_future' };
-  if (!sendScheduler) return { ok: false, reason: 'send_scheduler_not_true' };
+  if (sendSchedulerChecked) return { ok: false, reason: 'scheduler_already_sent_checkbox_true' };
   if (sentAt) return { ok: false, reason: 'already_sent' };
   if (uidText && /^(sending|email_sent_but_notion_update_failed|possible_already_sent)/i.test(errText)) return { ok: false, reason: 'possible_already_sent' };
   return { ok: true, event };

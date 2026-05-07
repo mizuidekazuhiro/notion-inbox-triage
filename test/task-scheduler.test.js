@@ -19,10 +19,34 @@ test('resolveEventWindow uses end when present, otherwise default duration', () 
   assert.equal(resolveEventWindow({ notionDate: { start: '2026-05-08T00:00:00.000Z' }, defaultDurationMin: 180 }).end, '2026-05-08T03:00:00.000Z');
 });
 
-test('isSchedulerTarget uses Event Date and passes on valid future done task', () => {
-  const page = { properties: { Status: { status: { name: 'Done' } }, 'Event Date': { date: { start: '2026-05-08T00:00:00.000Z' } }, 'Send Scheduler': { checkbox: true }, 'Scheduler Sent At': { date: null } } };
-  const props = { status: 'Status', eventDate: 'Event Date', sendScheduler: 'Send Scheduler', sentAt: 'Scheduler Sent At' };
+test('Send Scheduler=false の未来Doneタスクは対象になる', () => {
+  const page = { properties: { Status: { status: { name: 'Done' } }, 'Event Date': { date: { start: '2026-05-08T00:00:00.000Z' } }, 'Send Scheduler': { checkbox: false }, 'Scheduler Sent At': { date: null } } };
+  const props = { status: 'Status', eventDate: 'Event Date', sendScheduler: 'Send Scheduler', sentAt: 'Scheduler Sent At', uid: 'Scheduler UID', error: 'Scheduler Error' };
   assert.equal(isSchedulerTarget({ page, props, doneValue: 'Done', now: new Date('2026-05-07T00:00:00.000Z') }).ok, true);
+});
+
+test('Send Scheduler=true の未来Doneタスクは対象外になる', () => {
+  const page = { properties: { Status: { status: { name: 'Done' } }, 'Event Date': { date: { start: '2026-05-08T00:00:00.000Z' } }, 'Send Scheduler': { checkbox: true }, 'Scheduler Sent At': { date: null } } };
+  const props = { status: 'Status', eventDate: 'Event Date', sendScheduler: 'Send Scheduler', sentAt: 'Scheduler Sent At', uid: 'Scheduler UID', error: 'Scheduler Error' };
+  const result = isSchedulerTarget({ page, props, doneValue: 'Done', now: new Date('2026-05-07T00:00:00.000Z') });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'scheduler_already_sent_checkbox_true');
+});
+
+test('Scheduler Sent At がある場合は Send Scheduler=false でも対象外', () => {
+  const page = { properties: { Status: { status: { name: 'Done' } }, 'Event Date': { date: { start: '2026-05-08T00:00:00.000Z' } }, 'Send Scheduler': { checkbox: false }, 'Scheduler Sent At': { date: { start: '2026-05-07T00:00:00.000Z' } } } };
+  const props = { status: 'Status', eventDate: 'Event Date', sendScheduler: 'Send Scheduler', sentAt: 'Scheduler Sent At', uid: 'Scheduler UID', error: 'Scheduler Error' };
+  const result = isSchedulerTarget({ page, props, doneValue: 'Done', now: new Date('2026-05-07T00:00:00.000Z') });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'already_sent');
+});
+
+test('possible_already_sent 判定は維持する', () => {
+  const page = { properties: { Status: { status: { name: 'Done' } }, 'Event Date': { date: { start: '2026-05-08T00:00:00.000Z' } }, 'Send Scheduler': { checkbox: false }, 'Scheduler Sent At': { date: null }, 'Scheduler UID': { rich_text: [{ plain_text: 'uid-1' }] }, 'Scheduler Error': { rich_text: [{ plain_text: 'sending' }] } } };
+  const props = { status: 'Status', eventDate: 'Event Date', sendScheduler: 'Send Scheduler', sentAt: 'Scheduler Sent At', uid: 'Scheduler UID', error: 'Scheduler Error' };
+  const result = isSchedulerTarget({ page, props, doneValue: 'Done', now: new Date('2026-05-07T00:00:00.000Z') });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'possible_already_sent');
 });
 
 test('.ics generation has required sections and DTSTAMP format', () => {
@@ -57,6 +81,22 @@ test('pagination fetches all pages', async () => {
 test('README does not contain Event date string', () => {
   const readme = fs.readFileSync('README.md', 'utf-8');
   assert.equal(readme.includes('Event date'), false);
+});
+
+test('READMEに「Send Scheduler=true のものだけ送信」という古い説明が残っていない', () => {
+  const readme = fs.readFileSync('README.md', 'utf-8');
+  assert.equal(readme.includes('Send Scheduler=true かつ `Scheduler Sent At` 空の場合のみ'), false);
+});
+
+test('送信成功時に Send Scheduler=true がNotion update payloadに含まれる', () => {
+  const script = fs.readFileSync('scripts/send_task_event_scheduler.mjs', 'utf-8');
+  assert.match(script, /\[props\.sendScheduler\]:\s*\{\s*checkbox:\s*true\s*\}/);
+});
+
+test('SMTP送信失敗時は Send Scheduler=true にしない', () => {
+  const script = fs.readFileSync('scripts/send_task_event_scheduler.mjs', 'utf-8');
+  const smtpCatchBlock = script.split('} catch (e) {')[1].split("return { type: 'failed', reason: 'smtp_send_failed' };")[0];
+  assert.equal(smtpCatchBlock.includes('[props.sendScheduler]'), false);
 });
 
 

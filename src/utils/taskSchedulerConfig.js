@@ -32,3 +32,9 @@ export async function fetchAllTasks({ queryFn, databaseId, statusPropName, statu
   } while (start_cursor);
   return results;
 }
+
+export function resolveSchedulerMailTo(env = process.env) {
+  const to = env.COMPANY_SCHEDULER_MAIL_TO || env.MAIL_TO || '';
+  if (!to) throw new Error('COMPANY_SCHEDULER_MAIL_TO or MAIL_TO is required');
+  return to;
+}

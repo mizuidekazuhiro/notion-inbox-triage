@@ -1,7 +1,7 @@
 import nodemailer from 'nodemailer';
 import { Client } from '@notionhq/client';
 import { buildIcs, buildSchedulerUid, isSchedulerTarget, resolveEventWindow } from '../src/utils/taskScheduler.js';
-import { TASK_SCHEDULER_DEFAULTS, fetchAllTasks } from '../src/utils/taskSchedulerConfig.js';
+import { TASK_SCHEDULER_DEFAULTS, fetchAllTasks, resolveSchedulerMailTo } from '../src/utils/taskSchedulerConfig.js';
 
 const DEFAULTS = TASK_SCHEDULER_DEFAULTS;
 
@@ -94,6 +94,7 @@ export async function main() {
 
   const statusPropType = db.properties?.[props.status]?.type;
   const tasks = await fetchAllTasks({ queryFn: notion.databases.query.bind(notion.databases), databaseId: req('TASKS_DB_ID'), statusPropName: props.status, statusPropType, doneValue });
+  const mailTo = resolveSchedulerMailTo(process.env);
   const transporter = nodemailer.createTransport({ host: 'smtp.gmail.com', port: 587, secure: false, auth: { user: req('GMAIL_USER'), pass: req('GMAIL_APP_PASSWORD') } });
   const now = new Date();
   const lookahead = new Date(now.getTime() + lookaheadDays * 86400000);
@@ -102,7 +103,7 @@ export async function main() {
   const skippedByReason = {};
   for (const page of tasks) {
     checkedTotal++;
-    const result = await processPage({ page, now, lookahead, durationMin, props, doneValue, notion, transporter, mail: { from: req('GMAIL_USER'), to: req('COMPANY_SCHEDULER_MAIL_TO'), cc: process.env.COMPANY_SCHEDULER_MAIL_CC, bcc: process.env.COMPANY_SCHEDULER_MAIL_BCC } });
+    const result = await processPage({ page, now, lookahead, durationMin, props, doneValue, notion, transporter, mail: { from: req('GMAIL_USER'), to: mailTo, cc: process.env.COMPANY_SCHEDULER_MAIL_CC, bcc: process.env.COMPANY_SCHEDULER_MAIL_BCC } });
     if (result.type === 'sent') { targetTotal++; sent++; console.log(JSON.stringify({ level: 'info', action: 'sent', ...result })); }
     else if (result.type === 'failed') { targetTotal++; failed++; increment(skippedByReason, result.reason); }
     else { increment(skippedByReason, result.reason); }

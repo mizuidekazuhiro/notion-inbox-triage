@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildIcs, buildSchedulerUid, isSchedulerTarget, resolveEventWindow } from '../src/utils/taskScheduler.js';
-import { TASK_SCHEDULER_DEFAULTS, buildStatusDoneFilter, fetchAllTasks } from '../src/utils/taskSchedulerConfig.js';
+import { TASK_SCHEDULER_DEFAULTS, buildStatusDoneFilter, fetchAllTasks, resolveSchedulerMailTo } from '../src/utils/taskSchedulerConfig.js';
 import fs from 'node:fs';
 
 test('default TASK_EVENT_DATE_PROP_NAME is Event Date', () => {
@@ -57,4 +57,17 @@ test('pagination fetches all pages', async () => {
 test('README does not contain Event date string', () => {
   const readme = fs.readFileSync('README.md', 'utf-8');
   assert.equal(readme.includes('Event date'), false);
+});
+
+
+test('resolveSchedulerMailTo prioritizes COMPANY_SCHEDULER_MAIL_TO', () => {
+  assert.equal(resolveSchedulerMailTo({ COMPANY_SCHEDULER_MAIL_TO: 'a@example.com', MAIL_TO: 'b@example.com' }), 'a@example.com');
+});
+
+test('resolveSchedulerMailTo falls back to MAIL_TO', () => {
+  assert.equal(resolveSchedulerMailTo({ MAIL_TO: 'b@example.com' }), 'b@example.com');
+});
+
+test('resolveSchedulerMailTo throws when both are missing', () => {
+  assert.throws(() => resolveSchedulerMailTo({}), /COMPANY_SCHEDULER_MAIL_TO or MAIL_TO is required/);
 });

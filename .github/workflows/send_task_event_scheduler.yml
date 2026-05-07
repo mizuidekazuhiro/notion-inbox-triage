@@ -21,6 +21,7 @@ jobs:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           COMPANY_SCHEDULER_MAIL_TO: ${{ secrets.COMPANY_SCHEDULER_MAIL_TO }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
           COMPANY_SCHEDULER_MAIL_CC: ${{ secrets.COMPANY_SCHEDULER_MAIL_CC }}
           COMPANY_SCHEDULER_MAIL_BCC: ${{ secrets.COMPANY_SCHEDULER_MAIL_BCC }}
           TASK_SCHEDULER_ENABLED: ${{ vars.TASK_SCHEDULER_ENABLED }}

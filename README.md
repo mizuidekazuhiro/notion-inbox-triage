@@ -463,13 +463,19 @@ Tasks DB で `Status=Done` かつ未来 `Event Date` のタスクを検知し、
 - Scheduler Error（rich_text）
 
 ### GitHub Secrets
+必須:
 - NOTION_TOKEN
 - TASKS_DB_ID
 - GMAIL_USER
 - GMAIL_APP_PASSWORD
-- COMPANY_SCHEDULER_MAIL_TO
+- MAIL_TO
+
+任意:
+- COMPANY_SCHEDULER_MAIL_TO（未設定時は `MAIL_TO` を使用。Schedulerだけ別送信先にしたい場合に設定）
 - COMPANY_SCHEDULER_MAIL_CC
 - COMPANY_SCHEDULER_MAIL_BCC
+
+Task Event Scheduler の送信先はデフォルトで既存 Tasks Digest と同じ `MAIL_TO` を使います。`COMPANY_SCHEDULER_MAIL_TO` を設定した場合はそちらを優先します。
 
 ### GitHub Variables
 - TASK_SCHEDULER_ENABLED=true（**SecretsではなくVariablesに設定**）

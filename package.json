@@ -3,9 +3,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "send:digest": "node scripts/send_digest_smtp.mjs"
+    "send:digest": "node scripts/send_digest_smtp.mjs",
+    "send:task-scheduler": "node scripts/send_task_event_scheduler.mjs",
+    "test": "node --test"
   },
   "dependencies": {
-    "nodemailer": "^6.9.14"
+    "nodemailer": "^6.9.14",
+    "@notionhq/client": "^2.2.15"
   }
 }

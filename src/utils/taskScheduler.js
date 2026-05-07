@@ -47,7 +47,7 @@ export function isSchedulerTarget({ page, props, doneValue, now = new Date() }) 
 
 export function buildIcs({ uid, summary, description, startIso, endIso, timezone = DEFAULT_TIMEZONE, url }) {
   const escape = (s) => String(s || '').replace(/\\/g, '\\\\').replace(/,/g, '\\,').replace(/;/g, '\\;').replace(/\n/g, '\\n');
-  const dtStamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const dtStamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
   const fmtLocal = (iso) => {
     const d = new Date(iso);
     const p = (n) => String(n).padStart(2, '0');
@@ -61,7 +61,7 @@ export function buildIcs({ uid, summary, description, startIso, endIso, timezone
     'METHOD:REQUEST',
     'BEGIN:VEVENT',
     `UID:${escape(uid)}`,
-    `DTSTAMP:${dtStamp}Z`,
+    `DTSTAMP:${dtStamp}`,
     `DTSTART:${fmtLocal(startIso)}`,
     `DTEND:${fmtLocal(endIso)}`,
     `SUMMARY:${escape(summary)}`,

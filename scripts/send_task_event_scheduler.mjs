@@ -92,7 +92,8 @@ export async function main() {
   const db = await notion.databases.retrieve({ database_id: req('TASKS_DB_ID') });
   validateRequiredProperties(db, props);
 
-  const tasks = await fetchAllTasks({ queryFn: notion.databases.query.bind(notion.databases), databaseId: req('TASKS_DB_ID'), statusPropName: props.status, doneValue });
+  const statusPropType = db.properties?.[props.status]?.type;
+  const tasks = await fetchAllTasks({ queryFn: notion.databases.query.bind(notion.databases), databaseId: req('TASKS_DB_ID'), statusPropName: props.status, statusPropType, doneValue });
   const transporter = nodemailer.createTransport({ host: 'smtp.gmail.com', port: 587, secure: false, auth: { user: req('GMAIL_USER'), pass: req('GMAIL_APP_PASSWORD') } });
   const now = new Date();
   const lookahead = new Date(now.getTime() + lookaheadDays * 86400000);

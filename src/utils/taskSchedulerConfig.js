@@ -10,7 +10,14 @@ export const TASK_SCHEDULER_DEFAULTS = {
   TASK_SCHEDULER_DEFAULT_DURATION_MIN: '180'
 };
 
-export async function fetchAllTasks({ queryFn, databaseId, statusPropName, doneValue }) {
+export function buildStatusDoneFilter({ statusPropName, statusPropType, doneValue }) {
+  if (statusPropType === 'select') return { property: statusPropName, select: { equals: doneValue } };
+  if (statusPropType === 'status') return { property: statusPropName, status: { equals: doneValue } };
+  throw new Error(`Unsupported Status property type: ${statusPropType}`);
+}
+
+export async function fetchAllTasks({ queryFn, databaseId, statusPropName, statusPropType, doneValue }) {
+  const filter = buildStatusDoneFilter({ statusPropName, statusPropType, doneValue });
   const results = [];
   let start_cursor = undefined;
   do {
@@ -18,7 +25,7 @@ export async function fetchAllTasks({ queryFn, databaseId, statusPropName, doneV
       database_id: databaseId,
       page_size: 100,
       start_cursor,
-      filter: { property: statusPropName, status: { equals: doneValue } }
+      filter
     });
     results.push(...res.results);
     start_cursor = res.has_more ? res.next_cursor : undefined;

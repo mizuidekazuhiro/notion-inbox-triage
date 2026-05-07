@@ -1,0 +1,36 @@
+name: Send Task Event Scheduler
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/30 * * * *'
+
+jobs:
+  send-task-scheduler:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install
+      - run: npm run send:task-scheduler
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          TASKS_DB_ID: ${{ secrets.TASKS_DB_ID }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          COMPANY_SCHEDULER_MAIL_TO: ${{ secrets.COMPANY_SCHEDULER_MAIL_TO }}
+          COMPANY_SCHEDULER_MAIL_CC: ${{ secrets.COMPANY_SCHEDULER_MAIL_CC }}
+          COMPANY_SCHEDULER_MAIL_BCC: ${{ secrets.COMPANY_SCHEDULER_MAIL_BCC }}
+          TASK_SCHEDULER_ENABLED: ${{ vars.TASK_SCHEDULER_ENABLED }}
+          TASK_SCHEDULER_LOOKAHEAD_DAYS: ${{ vars.TASK_SCHEDULER_LOOKAHEAD_DAYS }}
+          TASK_SCHEDULER_DEFAULT_DURATION_MIN: ${{ vars.TASK_SCHEDULER_DEFAULT_DURATION_MIN }}
+          TASK_EVENT_DATE_PROP_NAME: ${{ vars.TASK_EVENT_DATE_PROP_NAME }}
+          TASK_SEND_SCHEDULER_PROP_NAME: ${{ vars.TASK_SEND_SCHEDULER_PROP_NAME }}
+          TASK_SCHEDULER_SENT_AT_PROP_NAME: ${{ vars.TASK_SCHEDULER_SENT_AT_PROP_NAME }}
+          TASK_SCHEDULER_UID_PROP_NAME: ${{ vars.TASK_SCHEDULER_UID_PROP_NAME }}
+          TASK_SCHEDULER_ERROR_PROP_NAME: ${{ vars.TASK_SCHEDULER_ERROR_PROP_NAME }}
+          TASK_STATUS_PROP_NAME: ${{ vars.TASK_STATUS_PROP_NAME }}
+          TASK_STATUS_DONE_VALUE: ${{ vars.TASK_STATUS_DONE_VALUE }}
+          NOTION_VERSION: ${{ vars.NOTION_VERSION }}

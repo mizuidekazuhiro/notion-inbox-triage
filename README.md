@@ -443,3 +443,52 @@ try {
 Script.setWidget(widget);
 Script.complete();
 ```
+
+## Task Event Scheduler（Done未来予定の .ics 送信）
+
+### 機能概要
+Tasks DB で `Status=Done` かつ未来 `Event date` のタスクを検知し、`Send Scheduler=true` かつ `Scheduler Sent At` 空の場合のみ、会社メールへ `.ics` 招待メールを送信します。
+
+### 対象条件
+- Status = Done
+- Event date が未来
+- Send Scheduler = true
+- Scheduler Sent At が空
+
+### Notionに必要なプロパティ
+- Event date（date）
+- Send Scheduler（checkbox）
+- Scheduler Sent At（date）
+- Scheduler UID（rich_text）
+- Scheduler Error（rich_text）
+
+### 必要な Secrets / Variables
+必須:
+- NOTION_TOKEN
+- TASKS_DB_ID
+- GMAIL_USER
+- GMAIL_APP_PASSWORD
+- COMPANY_SCHEDULER_MAIL_TO
+- TASK_SCHEDULER_ENABLED=true
+
+任意:
+- COMPANY_SCHEDULER_MAIL_CC
+- COMPANY_SCHEDULER_MAIL_BCC
+- TASK_SCHEDULER_LOOKAHEAD_DAYS（default: 365）
+- TASK_SCHEDULER_DEFAULT_DURATION_MIN（default: 180）
+- TASK_EVENT_DATE_PROP_NAME（default: Event date）
+- TASK_SEND_SCHEDULER_PROP_NAME（default: Send Scheduler）
+- TASK_SCHEDULER_SENT_AT_PROP_NAME（default: Scheduler Sent At）
+- TASK_SCHEDULER_UID_PROP_NAME（default: Scheduler UID）
+- TASK_SCHEDULER_ERROR_PROP_NAME（default: Scheduler Error）
+- TASK_STATUS_PROP_NAME（default: Status）
+- TASK_STATUS_DONE_VALUE（default: Done）
+
+### 予定時間ルール
+- Event date に end があれば end を利用
+- end がない場合は start + 180 分（`TASK_SCHEDULER_DEFAULT_DURATION_MIN` で変更可）
+- 日付のみ（時刻なし）の場合は JST 09:00-12:00 として送信
+
+### 実行方法
+- GitHub Actions: `.github/workflows/send_task_event_scheduler.yml` を `workflow_dispatch` 実行
+- ローカル: `npm run send:task-scheduler`

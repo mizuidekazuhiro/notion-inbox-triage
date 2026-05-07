@@ -49,9 +49,9 @@ test('possible_already_sent 判定は維持する', () => {
   assert.equal(result.reason, 'possible_already_sent');
 });
 
-test('.ics generation has required sections and DTSTAMP format', () => {
+test('.ics generation has required sections, private class, and DTSTAMP format', () => {
   const ics = buildIcs({ uid: 'uid', summary: 'title', description: 'desc', startIso: '2026-05-08T00:00:00.000Z', endIso: '2026-05-08T03:00:00.000Z' });
-  for (const token of ['BEGIN:VCALENDAR', 'METHOD:REQUEST', 'BEGIN:VEVENT', 'UID:uid', 'DTSTART:', 'DTEND:', 'SUMMARY:title']) assert.match(ics, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  for (const token of ['BEGIN:VCALENDAR', 'METHOD:REQUEST', 'BEGIN:VEVENT', 'UID:uid', 'DTSTART:', 'DTEND:', 'CLASS:PRIVATE', 'SUMMARY:title']) assert.match(ics, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   const dtstamp = ics.split('\r\n').find((line) => line.startsWith('DTSTAMP:'));
   assert.ok(dtstamp?.endsWith('Z'));
   assert.equal(dtstamp?.endsWith('ZZ'), false);

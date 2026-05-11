@@ -42,12 +42,13 @@ test('sortByDueDateAsc pushes null due_date to end', () => {
   assert.deepEqual(sorted.map((x) => x.id), ['1', '2', '3']);
 });
 
-test('success returns ok,count,items and includes Do + eligible Waiting', async () => {
+test('success returns ok,count,items and includes Do + eligible Waiting (Reminder Date or Waiting Since)', async () => {
   const originalFetch = global.fetch;
   global.fetch = async () => new Response(JSON.stringify({
     results: [
       { id: 'do', url: 'https://notion.so/do', properties: { '名前': { title: [{ plain_text: 'Do task' }] }, Status: { select: { name: 'Do' } }, Priority: { select: { name: 'High' } }, 'Due Date': { date: { start: '2026-05-10' } }, Summary: { rich_text: [{ plain_text: 's1' }] }, 'My Tasks': { rich_text: [{ plain_text: 'm1' }] }, 'Other Tasks': { rich_text: [{ plain_text: 'o1' }] } } },
       { id: 'w-ok', url: 'https://notion.so/w-ok', properties: { '名前': { title: [{ plain_text: 'Wait due' }] }, Status: { select: { name: 'Waiting' } }, Priority: { select: { name: 'Low' } }, 'Due Date': { date: { start: '2026-05-09' } }, 'Reminder Date': { date: { start: '2026-05-01' } } } },
+      { id: 'w-since', url: 'https://notion.so/w-since', properties: { '名前': { title: [{ plain_text: 'Wait since' }] }, Status: { select: { name: 'Waiting' } }, 'Due Date': { date: { start: '2026-05-08' } }, 'Waiting Since': { date: { start: '2026-05-06' } } } },
       { id: 'w-ng', url: 'https://notion.so/w-ng', properties: { '名前': { title: [{ plain_text: 'Wait future' }] }, Status: { select: { name: 'Waiting' } }, 'Reminder Date': { date: { start: '2999-01-01' } } } }
     ]
   }), { status: 200 });
@@ -63,8 +64,8 @@ test('success returns ok,count,items and includes Do + eligible Waiting', async 
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.equal(body.ok, true);
-    assert.equal(body.count, 2);
-    assert.deepEqual(body.items.map((x) => x.id), ['w-ok', 'do']);
+    assert.equal(body.count, 3);
+    assert.deepEqual(body.items.map((x) => x.id), ['w-since', 'w-ok', 'do']);
   } finally {
     global.fetch = originalFetch;
     global.Date = realDate;

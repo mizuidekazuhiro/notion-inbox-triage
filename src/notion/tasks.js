@@ -131,7 +131,7 @@ export async function queryWidgetTasksToday(env, pageSize = 100) {
     myTasks: page.properties["My Tasks"]?.rich_text?.[0]?.plain_text ?? "",
     otherTasks: page.properties["Other Tasks"]?.rich_text?.[0]?.plain_text ?? "",
     reminderDateISO: page.properties["Reminder Date"]?.date?.start ?? null,
-    waitingSinceISO: page.properties["Waiting since"]?.date?.start ?? null,
+    waitingSinceISO: page.properties["Waiting Since"]?.date?.start ?? null,
     url: page.url || ""
   }));
 }

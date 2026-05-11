@@ -6,6 +6,10 @@ function notionHeaders(env) {
   };
 }
 
+function pickPageTitle(page) {
+  return page.properties["名前"]?.title?.[0]?.plain_text ?? "Untitled";
+}
+
 export async function queryTasksByStatus(env, status, pageSize = 100) {
   const res = await fetch(
     `https://api.notion.com/v1/databases/${env.TASKS_DB_ID}/query`,
@@ -85,6 +89,51 @@ export async function queryDoWaitingTasks(env, pageSize = 100) {
     console.error("Failed to query Do/Waiting tasks", error);
     return [];
   }
+}
+
+export async function queryWidgetTasksToday(env, pageSize = 100) {
+  const res = await fetch(
+    `https://api.notion.com/v1/databases/${env.TASKS_DB_ID}/query`,
+    {
+      method: "POST",
+      headers: notionHeaders(env),
+      body: JSON.stringify({
+        page_size: pageSize,
+        filter: {
+          or: [
+            {
+              property: "Status",
+              select: { equals: "Do" }
+            },
+            {
+              property: "Status",
+              select: { equals: "Waiting" }
+            }
+          ]
+        }
+      })
+    }
+  );
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Failed to query widget tasks today: ${text}`);
+  }
+
+  const data = await res.json();
+  return (data.results || []).map((page) => ({
+    id: page.id,
+    name: pickPageTitle(page),
+    status: page.properties.Status?.select?.name ?? "",
+    priority: page.properties.Priority?.select?.name ?? "-",
+    dueDateISO: page.properties["Due Date"]?.date?.start ?? null,
+    summary: page.properties.Summary?.rich_text?.[0]?.plain_text ?? "",
+    myTasks: page.properties["My Tasks"]?.rich_text?.[0]?.plain_text ?? "",
+    otherTasks: page.properties["Other Tasks"]?.rich_text?.[0]?.plain_text ?? "",
+    reminderDateISO: page.properties["Reminder Date"]?.date?.start ?? null,
+    waitingSinceISO: page.properties["Waiting Since"]?.date?.start ?? null,
+    url: page.url || ""
+  }));
 }
 
 export async function getTask(env, taskId) {

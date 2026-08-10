@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   schedule:
     ## 07:00 JST = 22:00 UTC (previous day)
-    - cron: "0 22 * * 0-6"
+    - cron: "0 22 * * *"
 
 jobs:
   send:

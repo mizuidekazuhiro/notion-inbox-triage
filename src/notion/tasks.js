@@ -1,3 +1,20 @@
+const TASK_PROPERTIES = Object.freeze({
+  title: "名前",
+  status: "Status",
+  priority: "Priority",
+  dueDate: "Due Date",
+  reminderDate: "Reminder Date",
+  waitingSince: "Waiting Since",
+  sinceDo: "Since Do",
+  sinceSomeday: "Since Someday",
+  taskLevel: "Task Level",
+  parentTask: "Parent Task",
+  childTasks: "Child Tasks",
+  summary: "Summary",
+  myTasks: "My Tasks",
+  otherTasks: "Other Tasks"
+});
+
 function notionHeaders(env) {
   return {
     Authorization: `Bearer ${env.NOTION_TOKEN}`,
@@ -7,7 +24,60 @@ function notionHeaders(env) {
 }
 
 function pickPageTitle(page) {
-  return page.properties["名前"]?.title?.[0]?.plain_text ?? "Untitled";
+  return page.properties[TASK_PROPERTIES.title]?.title?.[0]?.plain_text ?? "Untitled";
+}
+
+function mapTaskPage(page) {
+  return {
+    id: page.id,
+    name: pickPageTitle(page),
+    status: page.properties[TASK_PROPERTIES.status]?.select?.name ?? "",
+    priority: page.properties[TASK_PROPERTIES.priority]?.select?.name ?? "-",
+    dueDateISO: page.properties[TASK_PROPERTIES.dueDate]?.date?.start ?? null,
+    sinceDoISO: page.properties[TASK_PROPERTIES.sinceDo]?.date?.start ?? "",
+    sinceSomedayISO: page.properties[TASK_PROPERTIES.sinceSomeday]?.date?.start ?? "",
+    reminderDateISO: page.properties[TASK_PROPERTIES.reminderDate]?.date?.start ?? null,
+    waitingSinceISO: page.properties[TASK_PROPERTIES.waitingSince]?.date?.start ?? null,
+    taskLevel: page.properties[TASK_PROPERTIES.taskLevel]?.select?.name ?? "",
+    parentTaskIds:
+      page.properties[TASK_PROPERTIES.parentTask]?.relation?.map((relation) => relation.id) ?? [],
+    childTaskIds:
+      page.properties[TASK_PROPERTIES.childTasks]?.relation?.map((relation) => relation.id) ?? [],
+    summary: page.properties[TASK_PROPERTIES.summary]?.rich_text?.[0]?.plain_text ?? "",
+    myTasks: page.properties[TASK_PROPERTIES.myTasks]?.rich_text?.[0]?.plain_text ?? "",
+    otherTasks: page.properties[TASK_PROPERTIES.otherTasks]?.rich_text?.[0]?.plain_text ?? "",
+    parentTaskName: "",
+    url: page.url || ""
+  };
+}
+
+async function attachParentTaskNames(env, items) {
+  const parentIds = [
+    ...new Set(items.flatMap((item) => item.parentTaskIds || []).filter(Boolean))
+  ];
+
+  if (parentIds.length === 0) return items;
+
+  const entries = await Promise.all(
+    parentIds.map(async (parentId) => {
+      try {
+        const page = await getTask(env, parentId);
+        return [parentId, pickPageTitle(page)];
+      } catch (error) {
+        console.error("Failed to fetch parent task", parentId, error);
+        return [parentId, ""];
+      }
+    })
+  );
+
+  const parentNames = new Map(entries);
+
+  return items.map((item) => ({
+    ...item,
+    parentTaskName: item.parentTaskIds?.[0]
+      ? parentNames.get(item.parentTaskIds[0]) || ""
+      : ""
+  }));
 }
 
 export async function queryTasksByStatus(env, status, pageSize = 100) {
@@ -19,7 +89,7 @@ export async function queryTasksByStatus(env, status, pageSize = 100) {
       body: JSON.stringify({
         page_size: pageSize,
         filter: {
-          property: "Status",
+          property: TASK_PROPERTIES.status,
           select: { equals: status }
         }
       })
@@ -32,15 +102,7 @@ export async function queryTasksByStatus(env, status, pageSize = 100) {
   }
 
   const data = await res.json();
-
-  return data.results.map((page) => ({
-    id: page.id,
-    name: page.properties["名前"]?.title?.[0]?.plain_text ?? "Untitled",
-    status: page.properties.Status?.select?.name ?? "",
-    priority: page.properties.Priority?.select?.name ?? "-",
-    sinceDoISO: page.properties["Since Do"]?.date?.start ?? "",
-    sinceSomedayISO: page.properties["Since Someday"]?.date?.start ?? ""
-  }));
+  return (data.results || []).map(mapTaskPage);
 }
 
 export async function queryDoWaitingTasks(env, pageSize = 100) {
@@ -55,11 +117,11 @@ export async function queryDoWaitingTasks(env, pageSize = 100) {
           filter: {
             or: [
               {
-                property: "Status",
+                property: TASK_PROPERTIES.status,
                 select: { equals: "Do" }
               },
               {
-                property: "Status",
+                property: TASK_PROPERTIES.status,
                 select: { equals: "Waiting" }
               }
             ]
@@ -74,17 +136,8 @@ export async function queryDoWaitingTasks(env, pageSize = 100) {
     }
 
     const data = await res.json();
-
-    return data.results.map((page) => ({
-      id: page.id,
-      name: page.properties["名前"]?.title?.[0]?.plain_text ?? "Untitled",
-      status: page.properties.Status?.select?.name ?? "",
-      priority: page.properties.Priority?.select?.name ?? "-",
-      sinceDoISO: page.properties["Since Do"]?.date?.start ?? "",
-      sinceSomedayISO: page.properties["Since Someday"]?.date?.start ?? "",
-      reminderDateISO: page.properties["Reminder Date"]?.date?.start ?? null,
-      waitingSinceISO: page.properties["Waiting since"]?.date?.start ?? null
-    }));
+    const items = (data.results || []).map(mapTaskPage);
+    return attachParentTaskNames(env, items);
   } catch (error) {
     console.error("Failed to query Do/Waiting tasks", error);
     return [];
@@ -102,11 +155,11 @@ export async function queryWidgetTasksToday(env, pageSize = 100) {
         filter: {
           or: [
             {
-              property: "Status",
+              property: TASK_PROPERTIES.status,
               select: { equals: "Do" }
             },
             {
-              property: "Status",
+              property: TASK_PROPERTIES.status,
               select: { equals: "Waiting" }
             }
           ]
@@ -121,19 +174,7 @@ export async function queryWidgetTasksToday(env, pageSize = 100) {
   }
 
   const data = await res.json();
-  return (data.results || []).map((page) => ({
-    id: page.id,
-    name: pickPageTitle(page),
-    status: page.properties.Status?.select?.name ?? "",
-    priority: page.properties.Priority?.select?.name ?? "-",
-    dueDateISO: page.properties["Due Date"]?.date?.start ?? null,
-    summary: page.properties.Summary?.rich_text?.[0]?.plain_text ?? "",
-    myTasks: page.properties["My Tasks"]?.rich_text?.[0]?.plain_text ?? "",
-    otherTasks: page.properties["Other Tasks"]?.rich_text?.[0]?.plain_text ?? "",
-    reminderDateISO: page.properties["Reminder Date"]?.date?.start ?? null,
-    waitingSinceISO: page.properties["Waiting Since"]?.date?.start ?? null,
-    url: page.url || ""
-  }));
+  return (data.results || []).map(mapTaskPage);
 }
 
 export async function getTask(env, taskId) {
@@ -155,7 +196,7 @@ export async function updateTaskStatus(env, taskId, nextStatus) {
     headers: notionHeaders(env),
     body: JSON.stringify({
       properties: {
-        Status: { select: { name: nextStatus } }
+        [TASK_PROPERTIES.status]: { select: { name: nextStatus } }
       }
     })
   });
@@ -167,3 +208,26 @@ export async function updateTaskStatus(env, taskId, nextStatus) {
 
   return res.json();
 }
+
+export async function updateTaskReminderDate(env, taskId, reminderDateISO) {
+  const res = await fetch(`https://api.notion.com/v1/pages/${taskId}`, {
+    method: "PATCH",
+    headers: notionHeaders(env),
+    body: JSON.stringify({
+      properties: {
+        [TASK_PROPERTIES.reminderDate]: {
+          date: { start: reminderDateISO }
+        }
+      }
+    })
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Failed to update Reminder Date: ${text}`);
+  }
+
+  return res.json();
+}
+
+export { TASK_PROPERTIES, mapTaskPage };

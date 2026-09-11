@@ -66,23 +66,33 @@ Cron / scheduled 実行の入口です。`runDailyInboxMail` を呼び出しま�
 ## Tasks Digest の送信方法
 Workers は「本文生成」のみを担当し、送信は GitHub Actions から Gmail SMTP で行います。
 
-### 📨 Tasks Digest（Do / Waiting）の仕組み
+### 📨 Tasks Digest V2 の仕組み
 
-- 毎朝の Tasks Digest では、単純な「Do」だけでなく、
-  「対応すべき Waiting タスク」も Do/Waiting として表示します。
-- 対象条件は以下です。
-  - Status = Do
-  - Status = Waiting かつ
-    - Reminder Date が今日以前
-    - または Reminder Date 未設定で Waiting since から 3 日以上経過
+毎朝の Digest は、単純な Do / Waiting の一覧ではなく、実行粒度で分類して表示します。
+
+- 親タスク（`Task Level = 親タスク`）は Daily Digest から除外する
+- 子タスクは、`Parent Task` の親タスク名を文脈として補足表示する
+- Do は以下に分類する
+  - **Action Now**: Due Date が今日以前で、期限超過・Do滞留が14日未満
+  - **Long Overdue**: 期限超過または Since Do から14日以上
+  - **Coming Up**: Due Date が未来
+  - **Needs Setup**: Due Date 未設定
+- Waiting は以下に分類する
+  - **Follow-up**: Reminder Date が今日以前、または Reminder Date 未設定で Waiting Since から3日以上
+  - **Needs Setup**: Reminder Date / Waiting Since がともに未設定
+- Reminder Date が未来の Do / Waiting は Snooze 中として、その日まで Daily Digest から外す
+- Do の [明日] / [+3日]、Waiting の [+3日] / [+7日] は Reminder Date を更新する
+- 週初営業日の Someday Review は従来どおり維持する
+
+古いタスクは Daily Digest から自動除外しません。長期滞留は **Long Overdue** として明示的に残します。
 
 ### なぜ Notion filter で判定しないのか
 - Notion Database Query は and/or の配列に undefined を含むと 400 validation_error になります。
-- Reminder Date 未設定・Waiting since 未設定のタスクが混在するため、
+- Reminder Date 未設定・Waiting Since 未設定のタスクが混在するため、
   複雑な条件を filter 側で組み立てると壊れやすいです。
 - そのため、本システムでは以下の責務分離を採用しています。
   - Notion API：Status = Do / Waiting までの粗い抽出
-  - Cloudflare Workers：Reminder Date / Waiting since / 日数計算などの業務ロジック
+  - Cloudflare Workers：Reminder Date / Waiting Since / 日数計算などの業務ロジック
 
 ### 安定性のための設計ルール
 - Notion filter の and/or 配列には undefined を絶対に入れない
@@ -266,7 +276,7 @@ curl -sS -X POST "<BASE_URL>/action/move" \
 - Inbox Page ID
 - Undo URL
 - Reminder Date
-- Waiting since
+- Waiting Since
 - Since Do
 - Since Someday
 

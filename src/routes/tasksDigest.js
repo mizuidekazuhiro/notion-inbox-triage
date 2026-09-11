@@ -1,12 +1,12 @@
-import { queryDoWaitingTasks, queryTasksByStatus } from "../notion/tasks";
-import { buildTasksDigestMail } from "../mail/buildTasksDigestMail";
+import { queryDoWaitingTasks, queryTasksByStatus } from "../notion/tasks.js";
+import { buildTasksDigestMail } from "../mail/buildTasksDigestMail.js";
 import {
-  buildDoWaitingItems,
+  classifyTasksForDigest,
   getJstDateString,
   isFirstBusinessDayOfWeek,
   sortTasksBySince,
   startOfJstDay
-} from "../utils/tasksDigest";
+} from "../utils/tasksDigest.js";
 
 export async function buildTasksDigestData({ env, baseUrl }) {
   const todayStart = startOfJstDay(new Date());
@@ -14,21 +14,23 @@ export async function buildTasksDigestData({ env, baseUrl }) {
   const holidays = await fetchHolidaysJson();
   const weekStart = isFirstBusinessDayOfWeek(todayStart, holidays);
 
-  const doWaitingItems = sortTasksBySince(
-    buildDoWaitingItems(await queryDoWaitingTasks(env), todayStart),
-    "digestSinceISO"
+  const digest = classifyTasksForDigest(
+    await queryDoWaitingTasks(env),
+    todayStart
   );
 
   const somedayItems = weekStart
     ? sortTasksBySince(await queryTasksByStatus(env, "Someday"), "sinceSomedayISO")
     : [];
 
-  const subject = weekStart
-    ? `Tasks｜Do/Waiting ${doWaitingItems.length}件 / Someday ${somedayItems.length}件`
-    : `Tasks｜Do/Waiting ${doWaitingItems.length}件`;
+  const configuredDoCount =
+    digest.actionNow.length + digest.longOverdue.length + digest.comingUp.length;
+  const followUpCount = digest.followUp.length;
+
+  const subject = `Tasks｜Do ${configuredDoCount}件 / Follow-up ${followUpCount}件`;
 
   const body = buildTasksDigestMail({
-    doWaitingItems,
+    ...digest,
     somedayItems,
     baseUrl,
     weekStart,
@@ -39,8 +41,12 @@ export async function buildTasksDigestData({ env, baseUrl }) {
     subject,
     body,
     week_start: weekStart,
-    count_do: doWaitingItems.length,
-    count_do_waiting: doWaitingItems.length,
+    count_do: configuredDoCount,
+    count_do_waiting: configuredDoCount + followUpCount,
+    count_follow_up: followUpCount,
+    count_long_overdue: digest.longOverdue.length,
+    count_coming_up: digest.comingUp.length,
+    count_needs_setup: digest.needsSetup.length,
     count_someday: somedayItems.length,
     today_jst: todayJstStr
   };

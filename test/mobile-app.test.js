@@ -41,6 +41,57 @@ test("PWA shell and client JavaScript parse and serve with restrictive CSP",asyn
  assert.match(await result.text(),/Notion Flow/);
 });
 
+test("Notion Flow deep link opens Tasks tab and invalid values default to Inbox",()=>{
+ function simulate(query) {
+   const elements=new Map();
+   const getElement=id=>{
+     if(!elements.has(id)) elements.set(id,{
+       hidden:false,
+       focus(){},
+       addEventListener(){},
+       classList:{toggle(){}},
+       setAttribute(){},
+       removeAttribute(){}
+     });
+     return elements.get(id);
+   };
+   const tabs=["inbox","tasks"].map(tab=>({
+     dataset:{tab},
+     selected:false,
+     classList:{toggle(_,selected){this.owner.selected=selected;}},
+     setAttribute(){},
+     removeAttribute(){}
+   }));
+   tabs.forEach(tab=>{tab.classList.owner=tab;});
+   const document={
+     getElementById:getElement,
+     querySelectorAll(selector){return selector==="[data-tab]"?tabs:[];},
+     querySelector(){return {addEventListener(){}};},
+     addEventListener(){}
+   };
+   const runtime={
+     document,
+     window:{location:{search:query}},
+     navigator:{},
+     sessionStorage:{getItem(){return "";}},
+     URLSearchParams,
+     console
+   };
+   new vm.Script(clientJs).runInNewContext(runtime,{timeout:2000});
+   return {tabs,sections:{inbox:getElement("inbox-panel").hidden,tasks:getElement("tasks-panel").hidden}};
+ }
+ const tasks=simulate("?tab=tasks");
+ assert.equal(tasks.sections.inbox,true);
+ assert.equal(tasks.sections.tasks,false);
+ assert.equal(tasks.tabs[1].selected,true);
+ const normal=simulate("");
+ assert.equal(normal.sections.inbox,false);
+ assert.equal(normal.sections.tasks,true);
+ const invalid=simulate("?tab=unexpected");
+ assert.equal(invalid.sections.inbox,false);
+ assert.equal(invalid.sections.tasks,true);
+});
+
 test("iOS touch icon returns actual PNG, not an SVG masquerading as PNG",async()=>{
  const result=await mobilePngIcon(180);
  assert.equal(result.status,200);

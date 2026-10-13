@@ -4,7 +4,7 @@ import vm from "node:vm";
 import { readFileSync } from "node:fs";
 
 const SOURCE=readFileSync(new URL("../scripts/NotionFocusLarge.js",import.meta.url),"utf8");
-const APP_URL="https://notion-inbox-triage.kazuhiro-mizuide.workers.dev/mobile";
+const APP_URL="https://notion-inbox-triage.kazuhiro-mizuide.workers.dev/mobile?tab=tasks";
 const API_URL="https://notion-inbox-triage.kazuhiro-mizuide.workers.dev/api/mobile/tasks";
 const TOKEN_KEY="NOTION_WEEK_WIDGET_SHORTCUT_TOKEN";
 
@@ -147,10 +147,11 @@ test("source handles failure and database truncation clearly",async()=>{
   const truncated=await runWidget({truncated:true});
   assert.ok(truncated.texts.includes("一部省略"));
 });
-test("all shown item links and footer use the expected trustworthy target",async()=>{
+test("all tappable widget surfaces open Notion Flow Tasks rather than a Notion page",async()=>{
   const {widget}=await runWidget();
   const visit=(s)=>[...(s.url?[s.url]:[]),...s.stacks.flatMap(visit)];
   const urls=visit(widget);
-  assert.ok(urls.includes(APP_URL));
-  assert.ok(urls.some(u=>u.startsWith("https://www.notion.so/")));
+  assert.ok(urls.length>=5, "include widget, actionable rows and footer");
+  assert.ok(urls.every(url=>url===APP_URL), "all clickable rows must open the Tasks management screen");
+  assert.equal(widget.url,APP_URL);
 });

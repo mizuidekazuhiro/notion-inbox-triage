@@ -2,7 +2,7 @@
 // Read only. Status updates belong in the authenticated Notion Flow PWA.
 // Reuses the token already saved by Notion Week; no new API or secret is needed.
 const API_URL = "https://notion-inbox-triage.kazuhiro-mizuide.workers.dev/api/mobile/tasks";
-const FLOW_URL = "https://notion-inbox-triage.kazuhiro-mizuide.workers.dev/mobile";
+const FLOW_URL = "https://notion-inbox-triage.kazuhiro-mizuide.workers.dev/mobile?tab=tasks";
 const TOKEN_KEY = "NOTION_WEEK_WIDGET_SHORTCUT_TOKEN";
 const MAX_DO = 3;
 const MAX_WAITING = 2;
@@ -109,13 +109,6 @@ function normalize(tasks,today) {
   return {doItems,waitingItems,projects:projects.length,
     overdues:doItems.filter(t=>dateDiff(t.due_date,today)<0 && dateDiff(t.due_date,today)!==null).length};
 }
-function isNotionUrl(value) {
-  try {
-    const url=new URL(value);
-    return url.protocol==="https:" &&
-      ["www.notion.so","notion.so","app.notion.com"].includes(url.hostname);
-  }catch(_){return false;}
-}
 function frost(stack,opacity=0.08) {
   stack.backgroundColor=color(C.surface,opacity);
   stack.cornerRadius=12;
@@ -184,7 +177,8 @@ function addTaskRow(widget,task,index,type,today) {
   row.size=new Size(0,35);
   row.setPadding(5,8,5,9);
   frost(row,0.055);
-  if(isNotionUrl(task.url)) row.url=task.url;
+  // Tapping any task opens the status-management screen, not a Notion page.
+  row.url=FLOW_URL;
   const left=row.addStack();
   left.layoutHorizontally();left.centerAlignContent();
   left.size=new Size(21,21);

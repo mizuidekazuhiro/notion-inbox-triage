@@ -19,7 +19,7 @@ function show(el,value){el.hidden=!value;}
 function status(text){$("status-line").textContent=text||"";}
 function safeDate(s){
  if(!s)return "期限なし";
- const m=/^(\\d{4})-(\\d{2})-(\\d{2})/.exec(s);
+ const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s);
  return m?Number(m[2])+"/"+Number(m[3]):"期限なし";
 }
 function warning(message){
@@ -74,10 +74,10 @@ function closeDialog(){
  show($("modal"),false);
  document.body.style.overflow="";
 }
-function selectButton(target,statusValue,onChoose){
+function selectButton(target,statusValue){
  target.classList.add("choice-grid");
  const buttons=[];
- const options=onChoose===undefined?MOVE:NEXT;
+ const options=MOVE;
  for(const choice of options){
   const b=node("button","choice",labels[choice]||choice);
   b.type="button";
@@ -179,7 +179,7 @@ function renderInbox(){
 }
 function openMove(item){
  openDialog("INBOX → TASK",item.title,"移動先のステータスを選択してください。原文の本文も既存処理で引き継ぎます。",body=>{
-  const choices=node("div");selectButton(choices,"Do",true);body.append(choices);
+  const choices=node("div");selectButton(choices,"Do");body.append(choices);
   const doFields=node("div"),waitingFields=node("div");
   const priorityLabel=node("label",null,"優先度");priorityLabel.htmlFor="move-priority";doFields.append(priorityLabel);
   const priority=node("select");priority.id="move-priority";

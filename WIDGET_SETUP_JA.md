@@ -7,7 +7,8 @@
 - 認証済み GET `/api/widget/schedule/week?limit=20` が当日から7暦日分の未来・継続中の予定をJSTで返します。
 - 認証ヘッダーは既存の `X-Shortcut-Token` を使用。Notion integration secret は Cloudflare Worker 内に留めます。
 - Scriptable: `scripts/NotionWeekSchedule.js` を iPhone に貼り付け、一度アプリ内で実行すると Shortcut Token の安全な入力ダイアログが表示されます（Keychain保存）。
-- 大ウィジェットで最大7件、中3件、小2件までを表示し、予定がさらにある場合は残件数を出します。タップするとNotionで確認できます。
+- 大ウィジェットで最大7件、中5件、小2件までを表示します。中サイズは「日付＋時刻｜予定名」の1行表示にして縦の余白を縮小します。中サイズで6件以上ある場合は右上に「5/6件」のように表示し、文字の切れを防ぎます。タップするとNotionで確認できます。
+- Scriptableのコードを更新した場合は、**iPhoneのNotion Weekスクリプトを新しい内容で全文置換**してください。ホーム画面のウィジェット追加や認証キーの再登録は通常不要です（ScriptableのKeychainを維持する場合）。
 - バックエンドは読み取り専用。既存の `/api/widget/tasks/today` 等の動作を変更しません。
 - Scriptable の自動更新時刻はiOS管理のため、30分ごとの厳密な更新は保証できません。
 

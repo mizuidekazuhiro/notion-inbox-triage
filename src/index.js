@@ -6,6 +6,7 @@ import { handleUndo } from "./routes/undo";
 import { handleConfirm, handleTaskUpdate } from "./routes/confirm";
 import { handleProjectsShortcut, handleProjectsChoices } from "./routes/projects";
 import { handleWidgetTasksToday } from "./routes/widgetTasks";
+import { handleMobileAsset, handleMobileApi } from "./routes/mobileApp.js";
 import { sanitizeSubject, readMessageBody } from "./email/parseEmail";
 import { createInboxItem } from "./notion/inboxCreate";
 import { jsonResponse } from "./utils/http";
@@ -20,6 +21,14 @@ export default {
         token_head: env.NOTION_TOKEN?.slice(0, 10),
         token_length: env.NOTION_TOKEN?.length
       });
+    }
+
+    if (url.pathname === "/mobile" || url.pathname.startsWith("/mobile/")) {
+      return handleMobileAsset(request);
+    }
+
+    if (url.pathname.startsWith("/api/mobile/")) {
+      return handleMobileApi(request, env);
     }
 
     if (url.pathname === "/api/inbox") {

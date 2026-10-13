@@ -22,10 +22,10 @@
 
 ## セキュリティ
 - `GET /mobile` 等は公開の静的UI。データは含みません。
-- `/api/mobile/*` はすべて `X-Shortcut-Token` が必須。Workerの `SHORTCUT_TOKEN` と比較。
+- `/api/mobile/*` は、既存ショートカットの `X-Shortcut-Token` または認証済みWebアプリの署名Cookieで認証します。Tokenを使用する従来のiPhoneショートカットには影響しません。
 - Notion API secret は Worker の中だけ。ブラウザに配布しません。
-- キーはURL、Cookie、長期 `localStorage` に置かず、iPhoneの **sessionStorage** のみに保持します。「解除」で消去できます。
-- 変更は POST JSONのみ。同一Origin要求・JSON Content-Type・サイズ制限・UUID/ステータス検証・所属DBチェックを行います。
+- 認証キーはログイン時にのみ使用し、ブラウザ保存領域（`sessionStorage` / `localStorage`）には**保存しません**。代わりにサーバー署名済み `__Host-` Cookieを `HttpOnly; Secure; SameSite=Strict` で発行します。Cookieに元の認証キーは含めません。30日有効、残り7日を切ってアクセスすると延長します。端末の「解除」でCookieを削除します。
+- 変更は POST JSONのみ。同一Origin要求・JSON Content-Type・サイズ制限・UUID/ステータス検証・所属DBチェックを行います。Cookie認証での書き込みは、追加で `Origin` および `X-Notion-Flow: 1` ヘッダーを検証してCSRFを防ぎます。
 - 他端末でステータスが変わっていた場合は409 Conflictで書き込みを拒否します。
 - CSP / no-store を設定。ユーザー提供タイトルは `textContent` で表示。
 - Service Workerは静的UIのシェルのみキャッシュし、NotionやAPIの情報はキャッシュしません。
@@ -36,7 +36,7 @@
 2. PRを `main` にマージ。Cloudflare Workers のプロジェクト `notion-inbox-triage` で **明示的にデプロイ**する。既存デプロイ手順に従うか、適切な権限を持つPC上で `npx wrangler deploy`。現在GitHubにCloudflareデプロイ用のWorkflowは存在しません。
 3. Workerの `SHORTCUT_TOKEN`, `NOTION_TOKEN`, `INBOX_DB_ID`, `TASKS_DB_ID`, `PROJECTS_DB_ID`, `ACTION_SECRET` が存在することを確認。**秘密鍵の値をチャット・Issue・PRに貼らないこと。**
 4. iPhoneのSafariから `https://notion-inbox-triage.kazuhiro-mizuide.workers.dev/mobile` にアクセス。
-5. 既存ショートカットが送っている `X-Shortcut-Token` を、アプリ内の認証画面に入力して接続。Notion APIのintegration tokenではありません。
+5. 既存ショートカットが送っている `X-Shortcut-Token` を、アプリ内の認証画面に**一度だけ**入力して接続。次回からCookieで再ログインを省略します。Notion APIのintegration tokenではありません。
 6. iPhone Safariの共有メニュー→「ホーム画面に追加」で「Notion Flow」を追加。iOSによって表示文言が異なる場合があります。
 
 ## 受入試験（Notion実データの変更は明示的なテスト操作時のみ）
@@ -50,6 +50,8 @@
 
 ## 限界・今後の拡張
 - PWAはネイティブiOSアプリではなく、オフラインでNotionの変更はできません。
+- iOSでScriptableから通常のHTTPSリンクをタップすると、標準ブラウザ（Chrome / Google / Safari）で開く場合があります。**インストール済みWebアプリへリンクから必ず切り替えることは保証できません**。Safari、Chrome、ホーム画面WebアプリではCookieの保存領域が分かれることがあり、最初に1回ずつログインが必要です。その後はCookieで一定期間保持できます。
+- 署名Cookieはステートレス方式であり、通常の「解除」は利用中ブラウザのCookieを削除します。端末外に複製されたCookieを個別に失効させるサーバー側のセッション台帳はありません。既存の `ACTION_SECRET` または `SHORTCUT_TOKEN` のローテーションで全セッションを失効させられます。共有端末利用は推奨しません。
 - 複数人認証・生体認証・監査ログ・レート制限が必要なら、Cloudflare Access / Passkeysなどの認証方式へ拡張してください。現状は個人利用を前提としています。
 - APIの大規模ページングは各DB最大1000件まで。超過時は `truncated` を表示します。
 - Notionの書き込みは既存の移動処理を再利用。移動後のProcessed At更新を読み直して検証します。もし検証に失敗した場合も、Taskが新規作成されている可能性があります。再実行せずNotion側を確認してください。

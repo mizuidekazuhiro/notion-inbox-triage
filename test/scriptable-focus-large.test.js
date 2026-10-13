@@ -48,7 +48,7 @@ function dataSample(){
     sampleTask({name:"Waiting経過",status:"Waiting",reminder_date:null,due_date:null,waiting_since:"2026-10-08"})
   ];
 }
-async function runWidget({data=dataSample(),family:"large",token:true,fail:false,truncated:false}={}){
+async function runWidget({data=dataSample(),family="large",token=true,fail=false,truncated=false}={}){
   const requests=[];
   const keyLookups=[];
   let currentWidget;

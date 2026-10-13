@@ -151,16 +151,22 @@ export async function handleMobileApi(request,env) {
     return protectedJson({ok:false,error:code===409?"already_processed":"move_failed"},code);
    }
    // The existing move routine may return before checking the final Processed At write.
-   const changed=await getMobilePage(env,data.inbox_page_id);
-   const verified=!!changed.properties?.["Processed At"]?.date?.start;
+   let verified=false;
+   try {
+    const changed=await getMobilePage(env,data.inbox_page_id);
+    verified=!!changed.properties?.["Processed At"]?.date?.start;
+   } catch(error) { console.warn("mobile_move_verification_unavailable"); }
    return protectedJson({ok:true,verified,created_task_id:detail.created_task_id,
       moved_to:data.status,undo_url:detail.undo_url||null});
   }
   if(path==="/api/mobile/task/status"){
    const result=await transitionMobileTask(env,data.task_id,data.expected_status,data.to);
    if(!result.ok)return protectedJson({ok:false,error:result.error,current_status:result.current_status||null},result.status);
-   const changed=await getMobilePage(env,data.task_id);
-   const verified=changed.properties?.Status?.select?.name===data.to;
+   let verified=false;
+   try {
+    const changed=await getMobilePage(env,data.task_id);
+    verified=changed.properties?.Status?.select?.name===data.to;
+   } catch(error) { console.warn("mobile_status_verification_unavailable"); }
    return protectedJson({ok:true,verified,changed:result.changed,from:result.from,to:result.to});
   }
  } catch(error) {

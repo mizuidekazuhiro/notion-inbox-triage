@@ -28,6 +28,7 @@ function withFetch(mock,fn){
 
 test("PWA shell and client JavaScript parse and serve with restrictive CSP",async()=>{
  assert.doesNotThrow(()=>new vm.Script(clientJs));
+ assert.ok(clientJs.includes(String.raw`const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s);`), "generated client must match numeric dates");
  assert.ok(html.includes("apple-touch-icon"));
  assert.ok(html.includes('id="dashboard"'));
  assert.ok(css.includes("backdrop-filter"));

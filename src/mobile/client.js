@@ -300,6 +300,8 @@ document.querySelectorAll("[data-status-filter]").forEach(button=>button.addEven
   document.querySelectorAll("[data-status-filter]").forEach(other=>other.classList.toggle("selected",other===button));
   renderTasks();
 }));
+// Open the Tasks tab directly when launched from the Notion Focus widget.
+setTab(new URLSearchParams(window.location.search).get("tab")==="tasks"?"tasks":"inbox");
 try{state.token=sessionStorage.getItem(storeKey)||"";}catch(_){}
 if(state.token){
  show($("auth"),false);show($("dashboard"),true);show($("lock"),true);

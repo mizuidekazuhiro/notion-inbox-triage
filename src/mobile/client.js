@@ -215,7 +215,7 @@ function openMove(item){
      if(!result.ok)throw new Error("移動を確認できませんでした");
      state.busy=false;closeDialog();
      await reload();
-     status("「"+item.title+"」を "+to+" に移動しました");
+     status(result.verified===false?"移動処理は実行されましたが最終確認できません。Notionを確認し、再実行しないでください":"「"+item.title+"」を "+to+" に移動しました");
    }catch(error){status(error.message);}
    finally{setBusy(false);}
   });
@@ -279,7 +279,7 @@ function openTask(t){
      const result=await api("/api/mobile/task/status","POST",{task_id:t.id,expected_status:t.status,to:next});
      if(!result.ok)throw new Error("変更を確認できませんでした");
      state.busy=false;closeDialog();await reload();
-     status("「"+t.name+"」を "+next+" に変更しました");
+     status(result.verified===false?"更新処理は実行されましたが最終確認できません。Notionで状態を確認してください":"「"+t.name+"」を "+next+" に変更しました");
     }catch(error){status(error.message);}
     finally{setBusy(false);}
    });

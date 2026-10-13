@@ -6,6 +6,7 @@ import { handleUndo } from "./routes/undo";
 import { handleConfirm, handleTaskUpdate } from "./routes/confirm";
 import { handleProjectsShortcut, handleProjectsChoices } from "./routes/projects";
 import { handleWidgetTasksToday } from "./routes/widgetTasks";
+import { handleWidgetScheduleWeek } from "./routes/widgetScheduleWeek";
 import { sanitizeSubject, readMessageBody } from "./email/parseEmail";
 import { createInboxItem } from "./notion/inboxCreate";
 import { jsonResponse } from "./utils/http";
@@ -36,6 +37,10 @@ export default {
 
     if (url.pathname === "/api/widget/tasks/today") {
       return handleWidgetTasksToday(request, env);
+    }
+
+    if (url.pathname === "/api/widget/schedule/week") {
+      return handleWidgetScheduleWeek(request, env);
     }
 
     if (url.pathname === "/api/projects/shortcut") {

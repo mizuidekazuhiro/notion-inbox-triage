@@ -236,7 +236,8 @@ export async function handleMoveCore({
   reminderDate,
   projectId,
   baseUrl,
-  debug
+  debug,
+  responseMode = "html"
 }) {
   const resolvedBaseUrl = baseUrl || env.BASE_URL || "";
 
@@ -275,6 +276,11 @@ export async function handleMoveCore({
   const isRetryableProcessingState =
     processedText.toLowerCase() === RETRYABLE_PROCESSING_TEXT && !processedAt;
   if ((processedText || processedAt) && !isRetryableProcessingState) {
+    if (responseMode === "json") {
+      return new Response(JSON.stringify({ ok: false, error: "already_processed" }), {
+        status: 409, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }
+      });
+    }
     return new Response("Already processed", { status: 200 });
   }
 
@@ -570,6 +576,15 @@ export async function handleMoveCore({
 </body>
 </html>
 `;
+
+  if (responseMode === "json") {
+    return new Response(JSON.stringify({
+      ok: true, moved_to: status, inbox_page_id: pageId,
+      created_task_id: createdTaskId, undo_url: undoUrlWithSig || ""
+    }), { status: 200, headers: {
+      "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store"
+    } });
+  }
 
   if (debug) {
     return new Response(

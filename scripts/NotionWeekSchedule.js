@@ -47,18 +47,26 @@ function makeWidget(result, error) {
   gradient.colors = [new Color("#101820", 0.90), new Color("#143039", 0.88)];
   gradient.locations = [0, 1];
   widget.backgroundGradient = gradient;
-  widget.setPadding(13, 14, 12, 14);
+  const family = config.widgetFamily || "large";
+  const compact = family === "medium";
+  widget.setPadding(compact ? 10 : 13, compact ? 13 : 14, compact ? 9 : 12, compact ? 13 : 14);
   widget.refreshAfterDate = new Date(Date.now() + 30 * 60 * 1000);
   widget.url = NOTION_HOME_URL;
 
-  const family = config.widgetFamily || "large";
-  const visible = family === "small" ? 2 : family === "medium" ? 3 : 7;
+  // Medium widgets use one compact line per event, showing up to five appointments.
+  // Small and large widget layouts retain their existing density.
+  const visible = family === "small" ? 2 : compact ? 5 : 7;
   const header = widget.addStack();
   header.centerAlignContent();
   addLabel(header, "NEXT 7 DAYS", 11, new Color("#9ABAD1"), Font.semiboldSystemFont(11));
   header.addSpacer();
-  if (result?.count !== undefined) addLabel(header, `${result.count}件`, 11, new Color("#DFE7F2"));
-  widget.addSpacer(9);
+  if (result?.count !== undefined) {
+    const countText = compact && result.count > visible
+      ? `${visible}/${result.count}件`
+      : `${result.count}件`;
+    addLabel(header, countText, 11, new Color("#DFE7F2"));
+  }
+  widget.addSpacer(compact ? 6 : 9);
 
   if (error) {
     addLabel(widget, error, 12, new Color("#F6D4D4"));
@@ -76,16 +84,28 @@ function makeWidget(result, error) {
     row.layoutHorizontally();
     row.centerAlignContent();
     if (item.url) row.url = item.url;
-    const when = row.addStack();
-    when.layoutVertically();
-    when.size = new Size(family === "small" ? 64 : 82, 30);
-    addLabel(when, formatDate(item.start), 10, new Color("#ABD3DD"), Font.mediumSystemFont(10));
-    addLabel(when, formatTime(item), 10, new Color("#A9B6C3"));
-    row.addSpacer(6);
-    addLabel(row, item.title, family === "small" ? 11 : 12, new Color("#FFFFFF"), Font.mediumSystemFont(12));
-    widget.addSpacer(family === "large" ? 9 : 8);
+    if (compact) {
+      // One-line timestamp and one-line title prevent clipping at 5 events.
+      const when = row.addStack();
+      when.layoutHorizontally();
+      when.size = new Size(110, 18);
+      const dateTime = `${formatDate(item.start)} ${formatTime(item)}`;
+      addLabel(when, dateTime, 10, new Color("#ABD3DD"), Font.mediumSystemFont(10));
+      row.addSpacer(6);
+      addLabel(row, item.title, 11.5, new Color("#FFFFFF"), Font.mediumSystemFont(11.5));
+      widget.addSpacer(items.length >= 5 ? 3 : 7);
+    } else {
+      const when = row.addStack();
+      when.layoutVertically();
+      when.size = new Size(family === "small" ? 64 : 82, 30);
+      addLabel(when, formatDate(item.start), 10, new Color("#ABD3DD"), Font.mediumSystemFont(10));
+      addLabel(when, formatTime(item), 10, new Color("#A9B6C3"));
+      row.addSpacer(6);
+      addLabel(row, item.title, family === "small" ? 11 : 12, new Color("#FFFFFF"), Font.mediumSystemFont(12));
+      widget.addSpacer(family === "large" ? 9 : 8);
+    }
   }
-  if (result.count > items.length) {
+  if (!compact && result.count > items.length) {
     addLabel(widget, `ほか ${result.count - items.length} 件（タップしてNotionへ）`, 10, new Color("#A5B8C5"));
   }
   widget.addSpacer();

@@ -59,6 +59,7 @@ test("Notion Flow deep link opens Tasks tab and invalid values default to Inbox"
      dataset:{tab},
      selected:false,
      classList:{toggle(_,selected){this.owner.selected=selected;}},
+     addEventListener(){},
      setAttribute(){},
      removeAttribute(){}
    }));

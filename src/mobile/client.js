@@ -19,7 +19,7 @@ function show(el,value){el.hidden=!value;}
 function status(text){$("status-line").textContent=text||"";}
 function safeDate(s){
  if(!s)return "期限なし";
- const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+ const m=/^(\\d{4})-(\\d{2})-(\\d{2})/.exec(s);
  return m?Number(m[2])+"/"+Number(m[3]):"期限なし";
 }
 function warning(message){

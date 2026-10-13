@@ -31,7 +31,7 @@ export const html = `<!doctype html>
     <input id="access-key" name="access-key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="X-Shortcut-Token" required>
     <button class="primary" type="submit">接続する <span aria-hidden="true">→</span></button>
   </form>
-  <p class="footnote">キーはこの画面のセッションだけに保存します。サーバー側は既存のNotion接続を利用します。</p>
+  <p class="footnote">認証キーは入力時のみ使用し、ログイン状態は安全なCookieで保持します。通常は次回以降の入力が不要です（30日間有効・利用時に更新）。ブラウザとホーム画面アプリでは最初の認証がそれぞれ必要な場合があります。</p>
 </section>
 
 <main id="dashboard" hidden>

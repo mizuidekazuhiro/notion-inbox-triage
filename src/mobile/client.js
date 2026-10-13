@@ -3,7 +3,7 @@ export const clientJs = `
 (function(){
 const $ = id => document.getElementById(id);
 const storeKey = "notion_flow_session_token";
-const state = {token:"",inbox:[],tasks:[],projects:[],tab:"inbox",filter:"all",busy:false};
+const state = {token:"",loggedIn:false,inbox:[],tasks:[],projects:[],tab:"inbox",filter:"all",busy:false};
 const labels = {Do:"Do · 実行",Waiting:"Waiting · 相手待ち",Done:"Done · 完了",Someday:"Someday · いつか",Thinking:"Thinking · 検討",Drop:"Drop · 取下げ"};
 const MOVE = ["Do","Waiting","Someday","Thinking","Done","Drop"];
 const NEXT = ["Done","Waiting","Do","Someday"];
@@ -35,17 +35,18 @@ function notionLink(url){
  const a=node("a","detail-link","Notionで開く ↗");a.href=url;a.target="_blank";a.rel="noopener noreferrer";return a;
 }
 async function api(path,method,payload){
- if(!state.token)throw new Error("接続してください");
- const headers={"X-Shortcut-Token":state.token,"Accept":"application/json"};
+ if(!state.loggedIn&&!state.token)throw new Error("接続してください");
+ const headers={"Accept":"application/json","X-Notion-Flow":"1"};
+ if(state.token)headers["X-Shortcut-Token"]=state.token;
  if(method==="POST")headers["Content-Type"]="application/json";
  let response;
- try{response=await fetch(path,{method:method||"GET",headers,body:payload?JSON.stringify(payload):undefined,cache:"no-store",credentials:"omit"});}
+ try{response=await fetch(path,{method:method||"GET",headers,body:payload?JSON.stringify(payload):undefined,cache:"no-store",credentials:"same-origin"});}
  catch(_){throw new Error("通信に失敗しました。接続を確認してください");}
  let data={};
  try{data=await response.json();}catch(_){}
  if(!response.ok||data.ok===false){
   if(response.status===401){
-   logout();
+   if(path!=="/api/mobile/session/start")localLogout();
    throw new Error("認証キーを確認してください");
   }
   if(response.status===409)throw new Error("他の端末で更新されています。一覧を更新してください");
@@ -115,7 +116,7 @@ async function reload(){
    if(answers[1].status==="fulfilled"){state.tasks=answers[1].value.items||[];}
    else failures++;
    if(answers[2].status==="fulfilled")state.projects=answers[2].value.items||[];
-   if(!state.token)return;
+   if(!state.loggedIn)return;
    refreshUI();
    const count=answers.filter(a=>a.status==="fulfilled").length;
    const truncated=answers.some(a=>a.status==="fulfilled"&&a.value.truncated);
@@ -129,24 +130,33 @@ async function login(event){
  if(!value)return;
  state.token=value;setBusy(true);status("接続を確認中…");
  try{
-   const result=await api("/api/mobile/inbox");
-   state.inbox=result.items||[];
-   try{sessionStorage.setItem(storeKey,value);}catch(_){}
+   await api("/api/mobile/session/start","POST",{});
+   // Never persist or retain the X-Shortcut-Token in JavaScript after login.
+   state.token="";state.loggedIn=true;
+   try{sessionStorage.removeItem(storeKey);}catch(_){}
    $("access-key").value="";
    show($("auth"),false);show($("dashboard"),true);show($("lock"),true);
    await reload();
  }catch(error){
-   if(state.token&&!$("dashboard").hidden){status(error.message);}
-   else{state.token="";try{sessionStorage.removeItem(storeKey);}catch(_){}
-      status(error.message);$("access-key").focus();}
+   state.token="";
+   if(state.loggedIn&&!$("dashboard").hidden)status(error.message);
+   else{state.loggedIn=false;status(error.message);$("access-key").focus();}
  }finally{setBusy(false);}
 }
-function logout(){
- state.token="";state.inbox=[];state.tasks=[];state.projects=[];
+function localLogout(){
+ state.token="";state.loggedIn=false;state.inbox=[];state.tasks=[];state.projects=[];
  try{sessionStorage.removeItem(storeKey);}catch(_){}
  show($("dashboard"),false);show($("auth"),true);show($("lock"),false);
  if(!$("modal").hidden){state.busy=false;closeDialog();}
- status("接続を解除しました");
+}
+async function logout(){
+ if(state.busy)return;
+ setBusy(true);status("セッションを解除中…");
+ try{
+   await api("/api/mobile/session/logout","POST",{});
+   localLogout();status("接続を解除しました");
+ }catch(error){status("接続解除できません: "+error.message);}
+ finally{setBusy(false);}
 }
 function setTab(tab){
  state.tab=tab;
@@ -302,11 +312,26 @@ document.querySelectorAll("[data-status-filter]").forEach(button=>button.addEven
 }));
 // Open the Tasks tab directly when launched from the Notion Focus widget.
 setTab(new URLSearchParams(window.location.search).get("tab")==="tasks"?"tasks":"inbox");
-try{state.token=sessionStorage.getItem(storeKey)||"";}catch(_){}
-if(state.token){
- show($("auth"),false);show($("dashboard"),true);show($("lock"),true);
- reload().catch(error=>status(error.message));
-}else $("access-key").focus();
+try{sessionStorage.removeItem(storeKey);}catch(_){}
+async function resumeSession(){
+  // Persistent session belongs to this browser/PWA; never read the secret from browser storage.
+  try{
+    const response=await fetch("/api/mobile/session",{
+      method:"GET",credentials:"same-origin",cache:"no-store",
+      headers:{"Accept":"application/json"}
+    });
+    if(response.ok){
+      state.loggedIn=true;
+      show($("auth"),false);show($("dashboard"),true);show($("lock"),true);
+      await reload();
+      return;
+    }
+  }catch(error){status("通信状態を確認してください");}
+  state.loggedIn=false;show($("auth"),true);show($("dashboard"),false);show($("lock"),false);
+  $("access-key").focus();
+}
+show($("auth"),false);
+resumeSession().catch(error=>status(error.message));
 if("serviceWorker" in navigator){
  navigator.serviceWorker.register("/mobile/sw.js",{scope:"/mobile"}).catch(()=>{});
 }

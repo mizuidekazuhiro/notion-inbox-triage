@@ -9,6 +9,7 @@ import {
 import { handleMoveCore } from "./move.js";
 import { jsonResponse } from "../utils/http.js";
 import { safeEqual } from "../utils/signature.js";
+import { verifySession, mintSessionCookie, clearSessionCookie, RENEW_BEFORE_SECONDS } from "../mobile/session.js";
 
 const MIME = Object.freeze({
   "/mobile":"text/html; charset=UTF-8",
@@ -27,13 +28,22 @@ function protectedJson(data, code=200) {
  response.headers.set("Referrer-Policy","no-referrer");
  return response;
 }
-function requireMobileAuth(request,env) {
- if(!env.SHORTCUT_TOKEN) return protectedJson({ok:false,error:"server_token_missing"},503);
- const provided=request.headers.get("X-Shortcut-Token")||"";
- if(!provided||!safeEqual(provided,env.SHORTCUT_TOKEN)){
-  return protectedJson({ok:false,error:"unauthorized"},401);
- }
- return null;
+function hasShortcutHeader(request,env) {
+ const token=request.headers.get("X-Shortcut-Token")||"";
+ return Boolean(env.SHORTCUT_TOKEN&&token&&safeEqual(token,env.SHORTCUT_TOKEN));
+}
+async function requireMobileAuth(request,env) {
+ if(!env.SHORTCUT_TOKEN)return protectedJson({ok:false,error:"server_token_missing"},503);
+ if(hasShortcutHeader(request,env))return null;
+ if(await verifySession(request,env))return null;
+ return protectedJson({ok:false,error:"unauthorized"},401);
+}
+function cookieWriteAllowed(request) {
+ // Cross-site pages cannot set the custom header without a CORS preflight.
+ // Require same-origin browser requests and the custom header for cookie writes.
+ return request.headers.get("Origin")===new URL(request.url).origin &&
+   request.headers.get("X-Notion-Flow")==="1" &&
+   writeOriginAllowed(request);
 }
 function writeOriginAllowed(request) {
  const url=new URL(request.url);
@@ -110,14 +120,47 @@ export async function handleMobileApi(request,env) {
   "/api/mobile/inbox":"GET",
   "/api/mobile/tasks":"GET",
   "/api/mobile/projects":"GET",
+  "/api/mobile/session":"GET",
+  "/api/mobile/session/start":"POST",
+  "/api/mobile/session/logout":"POST",
   "/api/mobile/inbox/move":"POST",
   "/api/mobile/task/status":"POST"
  };
  if(!Object.hasOwn(known,path))return protectedJson({ok:false,error:"not_found"},404);
  if(request.method!==known[path])return protectedJson({ok:false,error:"method_not_allowed"},405);
- const auth=requireMobileAuth(request,env);
+ // Session endpoints do not alter Notion, but require HTTPS-only credential issuance.
+ if(path==="/api/mobile/session/start"){
+  if(!writeOriginAllowed(request)||!cookieWriteAllowed(request))
+    return protectedJson({ok:false,error:"origin_forbidden"},403);
+  if(!hasShortcutHeader(request,env))
+    return protectedJson({ok:false,error:"unauthorized"},401);
+  if(!env.ACTION_SECRET)return protectedJson({ok:false,error:"session_configuration_missing"},503);
+  try {
+   const response=protectedJson({ok:true,authenticated:true});
+   response.headers.set("Set-Cookie",await mintSessionCookie(env));
+   return response;
+  }catch(error){
+   console.error("mobile_session_issue_failed");
+   return protectedJson({ok:false,error:"session_unavailable"},503);
+  }
+ }
+ if(path==="/api/mobile/session"){
+  const session=await verifySession(request,env);
+  if(!session)return protectedJson({ok:false,error:"unauthorized"},401);
+  const response=protectedJson({ok:true,authenticated:true});
+  if(session.remaining<RENEW_BEFORE_SECONDS)response.headers.set("Set-Cookie",await mintSessionCookie(env));
+  return response;
+ }
+ if(path==="/api/mobile/session/logout"){
+  if(!cookieWriteAllowed(request))return protectedJson({ok:false,error:"origin_forbidden"},403);
+  const response=protectedJson({ok:true,authenticated:false});
+  response.headers.set("Set-Cookie",clearSessionCookie());
+  return response;
+ }
+ const auth=await requireMobileAuth(request,env);
  if(auth)return auth;
- if(request.method==="POST"&&!writeOriginAllowed(request))
+ if(request.method==="POST" && (!writeOriginAllowed(request)||
+    (!hasShortcutHeader(request,env)&&!cookieWriteAllowed(request))))
   return protectedJson({ok:false,error:"origin_forbidden"},403);
  try {
   if(path==="/api/mobile/inbox")return protectedJson({ok:true,...await listMobileInbox(env)});

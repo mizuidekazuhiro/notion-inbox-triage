@@ -98,6 +98,8 @@ test("premium large widget loads authenticated mobile tasks from existing token,
   assert.equal(requests[0].headers["X-Shortcut-Token"],"secret-from-existing-notion-week");
   assert.deepEqual(keyLookups,[TOKEN_KEY]);
   assert.equal(widget.url,APP_URL);
+  // FixedDate.now() is pinned by the Scriptable VM test harness.
+  assert.equal(widget.refreshAfterDate.getTime() - Date.parse("2026-10-13T16:15:00.000Z"), 5*60*1000);
   assert.equal(widget.backgroundGradient.colors.length,3);
   assert.ok(texts.includes("NOTION  /  FOCUS"));
   assert.ok(texts.includes("OPEN FLOW  ↗"));

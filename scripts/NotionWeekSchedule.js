@@ -4,6 +4,7 @@ const API_URL = "https://notion-inbox-triage.kazuhiro-mizuide.workers.dev/api/wi
 const TOKEN_KEY = "NOTION_WEEK_WIDGET_SHORTCUT_TOKEN";
 const NOTION_HOME_URL = "https://www.notion.so/3d6dec27c9aa81d08065df5c1a1b9f76";
 const TIME_ZONE = "Asia/Tokyo";
+const REFRESH_MINUTES = 5; // Earliest requested refresh, not an iOS guarantee.
 
 async function tokenFromKeychain() {
   if (Keychain.contains(TOKEN_KEY)) return Keychain.get(TOKEN_KEY);
@@ -50,7 +51,8 @@ function makeWidget(result, error) {
   const family = config.widgetFamily || "large";
   const compact = family === "medium";
   widget.setPadding(compact ? 10 : 13, compact ? 13 : 14, compact ? 9 : 12, compact ? 13 : 14);
-  widget.refreshAfterDate = new Date(Date.now() + 30 * 60 * 1000);
+  // WidgetKit applies its own refresh budget; this is only the earliest request.
+  widget.refreshAfterDate = new Date(Date.now() + REFRESH_MINUTES * 60 * 1000);
   widget.url = NOTION_HOME_URL;
 
   // Medium widgets use one compact line per event, showing up to five appointments.

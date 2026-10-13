@@ -6,7 +6,7 @@ const FLOW_URL = "https://notion-inbox-triage.kazuhiro-mizuide.workers.dev/mobil
 const TOKEN_KEY = "NOTION_WEEK_WIDGET_SHORTCUT_TOKEN";
 const MAX_DO = 3;
 const MAX_WAITING = 2;
-const REFRESH_MINUTES = 25;
+const REFRESH_MINUTES = 5; // Earliest requested refresh, not an iOS guarantee.
 
 const C = {
   background: "#0A1925",
@@ -124,6 +124,7 @@ function buildBase() {
   widget.setPadding(13,14,10,14);
   widget.spacing=0;
   widget.url=FLOW_URL;
+  // WidgetKit applies its own refresh budget; this is only the earliest request.
   widget.refreshAfterDate=new Date(Date.now()+REFRESH_MINUTES*60000);
   return widget;
 }

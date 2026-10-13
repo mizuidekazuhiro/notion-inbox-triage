@@ -72,6 +72,9 @@ test("medium shows five appointments and a compact overflow count",async()=>{
   assert.ok(texts.includes("5/6件"));
   assert.ok(texts.some(t=>t.includes("10/14") && t.includes("09:00")));
   assert.deepEqual(rendered.padding,[10,13,9,13]);
+  const untilRefresh = rendered.refreshAfterDate.getTime() - Date.now();
+  assert.ok(untilRefresh > 4.9*60*1000 && untilRefresh <= 5*60*1000,
+    "refreshAfterDate must request the earliest refresh at five minutes");
   assert.equal(texts.filter(t=>t.startsWith("10/")).length,5);
   assert.ok(!texts.some(t=>t.includes("ほか 1 件")), "medium footer should not consume row space");
 });

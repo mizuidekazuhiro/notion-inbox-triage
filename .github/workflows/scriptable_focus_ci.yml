@@ -1,0 +1,25 @@
+name: Scriptable Focus Large Widget Tests
+on:
+  push:
+    branches:
+      - feature/scriptable-focus-large-widget-20261014
+  pull_request:
+    paths:
+      - "scripts/NotionFocusLarge.js"
+      - "test/scriptable-focus-large.test.js"
+      - ".github/workflows/scriptable_focus_ci.yml"
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate Scriptable widget source
+        run: node --check scripts/NotionFocusLarge.js
+      - name: Run full repository tests
+        run: npm test

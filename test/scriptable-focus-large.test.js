@@ -52,6 +52,10 @@ async function runWidget({data=dataSample(),family:"large",token:true,fail:false
   const requests=[];
   const keyLookups=[];
   let currentWidget;
+  class FixedDate extends Date {
+    constructor(value) { super(value === undefined ? "2026-10-13T16:15:00.000Z" : value); }
+    static now() { return Date.parse("2026-10-13T16:15:00.000Z"); }
+  }
   const sandbox={
     ListWidget:class extends Widget {},
     LinearGradient:class {constructor(){this.colors=[];this.locations=[];}},
@@ -76,7 +80,7 @@ async function runWidget({data=dataSample(),family:"large",token:true,fail:false
     },
     Alert:class {},
     Script:{setWidget(w){currentWidget=w;},complete(){}},
-    Date,Intl,URL,console
+    Date:FixedDate,Intl,URL,console
   };
   const script=new vm.Script("(async()=>{\n"+SOURCE+"\n})()",{filename:"NotionFocusLarge.js"});
   await script.runInNewContext(sandbox,{timeout:4000});
@@ -107,7 +111,7 @@ test("active child and standalone tasks display; parent appears only as a count"
   assert.ok(txt.includes("↳ 案件A"));
   assert.ok(txt.includes("案件管理 1件"));
   assert.ok(!txt.includes("親タスクそのもの"));
-  assert.ok(!txt.includes("長期滞留"),"long overdue should not outrank upcoming actionable work");
+  assert.ok(txt.includes("長期滞留"),"long overdue remains visible after current priorities");
   assert.ok(txt.some(t=>t==="3/5"),"shows visible/total count for Do");
   assert.ok(txt.some(t=>t==="2/3"),"shows visible/total count for Waiting");
 });

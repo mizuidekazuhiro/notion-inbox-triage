@@ -115,15 +115,64 @@ test("active child and standalone tasks display; parent appears only as a count"
   assert.ok(!txt.includes("親タスクそのもの"));
   assert.ok(txt.includes("長期滞留"),"long overdue remains visible after current priorities");
   assert.ok(txt.some(t=>t==="3/5"),"shows visible/total count for Do");
-  assert.ok(txt.some(t=>t==="2/3"),"shows visible/total count for Waiting");
+  assert.ok(txt.some(t=>t==="3/3"),"uses three Waiting slots when both statuses have at least three tasks");
 });
 test("waiting section surfaces overdue reminder before future reminders",async()=>{
   const {texts}=await runWidget();
   assert.ok(texts.includes("Waiting今日確認"));
   assert.ok(texts.includes("Waiting経過"));
-  assert.ok(!texts.includes("Waiting未来確認"));
+  assert.ok(texts.includes("Waiting未来確認"));
+  assert.ok(texts.indexOf("Waiting今日確認") < texts.indexOf("Waiting未来確認"));
   assert.ok(texts.includes("今日確認"));
   assert.ok(texts.includes("6日待機"));
+});
+test("eight Do and zero Waiting fill six visible cards without wasting space",async()=>{
+  const data=Array.from({length:8},(_,i)=>sampleTask({
+    id:String(i),name:"実行タスク "+(i+1),status:"Do",due_date:"2026-10-"+String(14+i).padStart(2,"0")
+  }));
+  const {widget,texts}=await runWidget({data});
+  assert.ok(texts.includes("6/8"),"the section heading must report six of eight");
+  assert.ok(texts.includes("実行タスク 1"));
+  assert.ok(texts.includes("実行タスク 6"));
+  assert.ok(!texts.includes("実行タスク 7"));
+  assert.ok(!texts.includes("AWAITING"),"a zero-Waiting placeholder wastes too much room");
+  assert.ok(!texts.includes("現在、相手待ちはありません"));
+  const allStacks=(s)=>[s,...s.stacks.flatMap(allStacks)];
+  const rows=allStacks(widget).filter(s=>s.size?.height===31 && s.url===APP_URL);
+  assert.equal(rows.length,6,"six interactive task cards fit the large widget");
+  assert.ok(rows.every(s=>s.spacers.includes(undefined)),
+    "task cards should expand to available width rather than shrink around text");
+  assert.ok(texts.includes("OPEN FLOW  ↗"),"the footer is retained");
+  assert.deepEqual(widget.padding,[10,14,8,14]);
+});
+test("unused Waiting capacity is redistributed to Do without hiding urgent follow-ups",async()=>{
+ const base=Array.from({length:8},(_,i)=>sampleTask({
+   id:"do-"+i,name:"DO項目 "+(i+1),status:"Do",
+   due_date:"2026-10-"+String(14+i).padStart(2,"0")
+ }));
+ const createWait=i=>sampleTask({
+   id:"waiting-"+i,name:"WAIT項目 "+(i+1),status:"Waiting",
+   reminder_date:"2026-10-"+String(14+i).padStart(2,"0"),
+   due_date:null
+ });
+ for(const [waiting,expectDo,expectWait] of [[0,6,0],[1,5,1],[2,4,2],[3,3,3],[5,3,3]]){
+   const {texts}=await runWidget({data:[...base,...Array.from({length:waiting},(_,i)=>createWait(i))]});
+   assert.ok(texts.includes(expectDo+"/8"));
+   if(waiting)assert.ok(texts.includes(expectWait+"/"+waiting));
+   for(let i=1;i<=expectDo;i++)assert.ok(texts.includes("DO項目 "+i));
+   for(let i=1;i<=expectWait;i++)assert.ok(texts.includes("WAIT項目 "+i));
+   assert.equal(texts.filter(t=>t.startsWith("DO項目 ")).length+texts.filter(t=>t.startsWith("WAIT項目 ")).length,6);
+ }
+});
+test("Waiting-only days use all six available slots too",async()=>{
+ const data=Array.from({length:7},(_,i)=>sampleTask({
+   id:"waiting-"+i,name:"待機 "+(i+1),status:"Waiting",
+   reminder_date:"2026-10-"+String(14+i).padStart(2,"0"),due_date:null
+ }));
+ const {texts}=await runWidget({data});
+ assert.ok(!texts.includes("ACTION NOW"));
+ assert.ok(texts.includes("6/7"));
+ assert.equal(texts.filter(t=>t.startsWith("待機 ")).length,6);
 });
 test("expired long overdue tasks are not silently dropped",async()=>{
   const onlyOld=[sampleTask({name:"昔のタスク",due_date:"2026-06-01"})];

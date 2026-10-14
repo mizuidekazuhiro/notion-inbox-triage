@@ -4,8 +4,9 @@
 const API_URL = "https://notion-inbox-triage.kazuhiro-mizuide.workers.dev/api/mobile/tasks";
 const FLOW_URL = "https://notion-inbox-triage.kazuhiro-mizuide.workers.dev/mobile?tab=tasks";
 const TOKEN_KEY = "NOTION_WEEK_WIDGET_SHORTCUT_TOKEN";
-const MAX_DO = 3;
-const MAX_WAITING = 2;
+// Six total slots are shared by Do/Waiting: unused Waiting space belongs to Do.
+const MAX_VISIBLE = 6;
+const BASE_SLOTS_PER_STATUS = 3;
 const REFRESH_MINUTES = 5; // Earliest requested refresh, not an iOS guarantee.
 
 const C = {
@@ -109,6 +110,18 @@ function normalize(tasks,today) {
   return {doItems,waitingItems,projects:projects.length,
     overdues:doItems.filter(t=>dateDiff(t.due_date,today)<0 && dateDiff(t.due_date,today)!==null).length};
 }
+function selectVisibleCounts(model) {
+  // Reserve up to three places per status, then reuse empty places for the
+  // other status. This avoids showing just three tasks when Waiting is empty.
+  let doCount=Math.min(BASE_SLOTS_PER_STATUS,model.doItems.length);
+  let waitCount=Math.min(BASE_SLOTS_PER_STATUS,model.waitingItems.length);
+  let remaining=MAX_VISIBLE-doCount-waitCount;
+  const extraDo=Math.min(remaining,model.doItems.length-doCount);
+  doCount+=extraDo;
+  remaining-=extraDo;
+  waitCount+=Math.min(remaining,model.waitingItems.length-waitCount);
+  return {doCount,waitCount};
+}
 function frost(stack,opacity=0.08) {
   stack.backgroundColor=color(C.surface,opacity);
   stack.cornerRadius=12;
@@ -121,7 +134,7 @@ function buildBase() {
   gradient.colors=[color(C.background),color("#102938"),color(C.backgroundEnd)];
   gradient.locations=[0,0.56,1];
   widget.backgroundGradient=gradient;
-  widget.setPadding(13,14,10,14);
+  widget.setPadding(10,14,8,14);
   widget.spacing=0;
   widget.url=FLOW_URL;
   // WidgetKit applies its own refresh budget; this is only the earliest request.
@@ -146,8 +159,8 @@ function addStatStrip(widget,model) {
   ribbon.layoutHorizontally();
   ribbon.centerAlignContent();
   frost(ribbon,0.07);
-  ribbon.setPadding(7,12,7,12);
-  ribbon.size=new Size(0,44);
+  ribbon.setPadding(6,12,6,12);
+  ribbon.size=new Size(0,42);
   const left=ribbon.addStack();left.layoutVertically();
   label(left,"DO  /  ACTION",8,C.amber,"semibold");
   left.addSpacer(1);
@@ -171,32 +184,33 @@ function sectionHeading(widget,title,shown,total,hex) {
   bar.addSpacer();
   label(bar,shown+"/"+total,9,C.faint,"medium");
 }
-function addTaskRow(widget,task,index,type,today) {
+function addTaskRow(widget,task,index,type,today,dense=false) {
   const accent=type==="do"?C.amber:C.cyan;
   const row=widget.addStack();
   row.layoutHorizontally();row.centerAlignContent();
-  row.size=new Size(0,35);
-  row.setPadding(5,8,5,9);
+  row.size=new Size(0,dense?31:35);
+  row.setPadding(dense?3:5,8,dense?3:5,9);
   frost(row,0.055);
   // Tapping any task opens the status-management screen, not a Notion page.
   row.url=FLOW_URL;
   const left=row.addStack();
   left.layoutHorizontally();left.centerAlignContent();
-  left.size=new Size(21,21);
+  left.size=new Size(dense?19:21,dense?19:21);
   left.backgroundColor=color(accent,0.12);
   left.cornerRadius=7;
   label(left,String(index+1).padStart(2,"0"),9,accent,"semibold");
-  row.addSpacer(8);
+  row.addSpacer(6);
   const details=row.addStack();
   details.layoutVertically();
   details.spacing=1;
-  label(details,task.name||"無題のタスク",11.4,C.white,"medium");
+  label(details,task.name||"無題のタスク",dense?10.8:11.4,C.white,"medium");
   const hasParent=!!task.parent_id;
   const parentName=hasParent?(task.parent_name||"親タスク"):"";
   const context=hasParent?("↳ "+parentName):
     task.task_level ? "INDEPENDENT" : "未分類";
-  label(details,context,8.6,C.faint);
-  row.addSpacer(5);
+  label(details,context,dense?8.1:8.6,C.faint);
+  // Flexible space keeps date indicators aligned on the right.
+  row.addSpacer();
   const stamp=row.addStack();
   stamp.layoutVertically();stamp.centerAlignContent();
   stamp.size=new Size(52,0);
@@ -230,7 +244,7 @@ function addFooter(widget,model,truncated) {
 function makeWidget(result,error,now=new Date()) {
   const widget=buildBase();
   addHeader(widget,now);
-  widget.addSpacer(6);
+  widget.addSpacer(5);
   if(error) {
     const panel=widget.addStack();panel.layoutVertically();frost(panel,0.08);
     panel.setPadding(15,12,15,12);
@@ -244,25 +258,35 @@ function makeWidget(result,error,now=new Date()) {
   const today=dayKey(now);
   const model=normalize(result.items,today);
   addStatStrip(widget,model);
-  widget.addSpacer(9);
-  const doList=model.doItems.slice(0,MAX_DO);
-  sectionHeading(widget,"ACTION NOW",doList.length,model.doItems.length,C.amber);
-  widget.addSpacer(5);
-  if(!doList.length)addEmptyRow(widget,"いま実行するタスクはありません");
-  for(let i=0;i<doList.length;i++) {
-    addTaskRow(widget,doList[i],i,"do",today);
-    if(i<doList.length-1)widget.addSpacer(4);
+  widget.addSpacer(7);
+  const counts=selectVisibleCounts(model);
+  const doList=model.doItems.slice(0,counts.doCount);
+  const waitList=model.waitingItems.slice(0,counts.waitCount);
+  const dense=doList.length+waitList.length>=5;
+  // No wasted "currently no waiting" card: the strip already shows WAITING 00.
+  // Keep informative empty states if there are no actionable tasks at all.
+  const showDo=doList.length>0||waitList.length===0;
+  const showWait=waitList.length>0||doList.length===0;
+  if(showDo) {
+    sectionHeading(widget,"ACTION NOW",doList.length,model.doItems.length,C.amber);
+    widget.addSpacer(4);
+    if(!doList.length)addEmptyRow(widget,"いま実行するタスクはありません");
+    for(let i=0;i<doList.length;i++) {
+      addTaskRow(widget,doList[i],i,"do",today,dense);
+      if(i<doList.length-1)widget.addSpacer(dense?2:4);
+    }
   }
-  widget.addSpacer(9);
-  const waitList=model.waitingItems.slice(0,MAX_WAITING);
-  sectionHeading(widget,"AWAITING",waitList.length,model.waitingItems.length,C.cyan);
-  widget.addSpacer(5);
-  if(!waitList.length)addEmptyRow(widget,"現在、相手待ちはありません");
-  for(let i=0;i<waitList.length;i++) {
-    addTaskRow(widget,waitList[i],i,"waiting",today);
-    if(i<waitList.length-1)widget.addSpacer(4);
+  if(showDo&&showWait)widget.addSpacer(7);
+  if(showWait) {
+    sectionHeading(widget,"AWAITING",waitList.length,model.waitingItems.length,C.cyan);
+    widget.addSpacer(4);
+    if(!waitList.length)addEmptyRow(widget,"現在、相手待ちはありません");
+    for(let i=0;i<waitList.length;i++) {
+      addTaskRow(widget,waitList[i],i,"waiting",today,dense);
+      if(i<waitList.length-1)widget.addSpacer(dense?2:4);
+    }
   }
-  widget.addSpacer(9);
+  widget.addSpacer(6);
   addFooter(widget,model,!!result.truncated);
   widget.addSpacer();
   return widget;

@@ -9,6 +9,9 @@ import {
 import { handleMoveCore } from "./move.js";
 import { jsonResponse } from "../utils/http.js";
 import { safeEqual } from "../utils/signature.js";
+import {
+  createMobileTask, listMobileParentTasks, validMobileTaskCreate, MobileTaskCreateError
+} from "../notion/mobileCreate.js";
 import { verifySession, mintSessionCookie, clearSessionCookie, RENEW_BEFORE_SECONDS } from "../mobile/session.js";
 
 const MIME = Object.freeze({
@@ -120,6 +123,8 @@ export async function handleMobileApi(request,env) {
   "/api/mobile/inbox":"GET",
   "/api/mobile/tasks":"GET",
   "/api/mobile/projects":"GET",
+  "/api/mobile/task/parents":"GET",
+  "/api/mobile/task/create":"POST",
   "/api/mobile/session":"GET",
   "/api/mobile/session/start":"POST",
   "/api/mobile/session/logout":"POST",
@@ -166,8 +171,25 @@ export async function handleMobileApi(request,env) {
   if(path==="/api/mobile/inbox")return protectedJson({ok:true,...await listMobileInbox(env)});
   if(path==="/api/mobile/tasks")return protectedJson({ok:true,...await listMobileTasks(env)});
   if(path==="/api/mobile/projects")return protectedJson({ok:true,...await listMobileProjects(env)});
+  if(path==="/api/mobile/task/parents")return protectedJson({ok:true,...await listMobileParentTasks(env)});
   let data;try{data=await bodyJson(request);}
   catch(_){return protectedJson({ok:false,error:"invalid_payload"},400);}
+  if(path==="/api/mobile/task/create"){
+    if(!validMobileTaskCreate(data)){
+      return protectedJson({ok:false,error:"invalid_task_create"},400);
+    }
+    // A POST is the only way to create a task. Never create as a side effect of a GET.
+    const created=await createMobileTask(env,data);
+    let verified=false;
+    try{
+      const page=await getMobilePage(env,created.id);
+      verified=pageBelongsToDatabase(page,env.TASKS_DB_ID) &&
+        page.properties?.Status?.select?.name===created.status &&
+        (page.properties?.["名前"]?.title||[]).map(t=>t.plain_text||t.text?.content||"")
+          .join("")===created.name;
+    }catch(error){console.warn("mobile_task_create_verification_unavailable");}
+    return protectedJson({ok:true,...created,verified},201);
+  }
   if(path==="/api/mobile/inbox/move"){
    if(!validMoveRequest(data))return protectedJson({ok:false,error:"invalid_move"},400);
    const source=await getMobilePage(env,data.inbox_page_id);
@@ -213,6 +235,8 @@ export async function handleMobileApi(request,env) {
    return protectedJson({ok:true,verified,changed:result.changed,from:result.from,to:result.to});
   }
  } catch(error) {
+  if(error instanceof MobileTaskCreateError)
+    return protectedJson({ok:false,error:error.code},error.status);
   console.error("mobile_app_error",parseError(error));
   return protectedJson({ok:false,error:"notion_unavailable"},502);
  }

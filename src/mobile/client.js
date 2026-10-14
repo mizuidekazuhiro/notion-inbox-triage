@@ -58,6 +58,7 @@ async function api(path,method,payload){
 function setBusy(value){
  state.busy=value;
  $("refresh").disabled=value;
+ $("new-task").disabled=value;
  const buttons=document.querySelectorAll(".modal .primary");
  buttons.forEach(b=>b.disabled=value);
 }
@@ -96,6 +97,136 @@ function inputRow(parent,name,label,type,value){
  const inp=node("input");inp.id=name;inp.name=name;inp.type=type;
  if(value)inp.value=value;
  parent.append(inp);return inp;
+}
+function selectRow(parent,id,labelText,options){
+ const l=node("label",null,labelText);l.htmlFor=id;parent.append(l);
+ const select=node("select");select.id=id;select.name=id;
+ for(const choice of options){
+  const opt=node("option",null,choice[1]);opt.value=choice[0];
+  select.append(opt);
+ }
+ parent.append(select);return select;
+}
+function createFieldGroup(parent,className){
+ const div=node("div",className);
+ parent.append(div);return div;
+}
+async function openCreateTask(){
+ if(state.busy||!state.loggedIn)return;
+ setBusy(true);
+ let parentItems=[],parentError=false;
+ try{
+  const data=await api("/api/mobile/task/parents");
+  parentItems=data.items||[];
+  parentError=!!data.truncated;
+ }catch(e){
+  if(!state.loggedIn)return;
+  parentError=true;
+ }finally{setBusy(false);}
+ if(!state.loggedIn)return;
+
+ openDialog("CREATE / TASK","新しいタスクを登録",
+   "NotionのTasks DBに直接保存します。Inboxには入れません。",body=>{
+  const form=node("form","create-form");form.id="create-task-form";
+  const name=inputRow(form,"create-name","タスク名 *","text");
+  name.required=true;name.maxLength=240;name.placeholder="何をする？";
+  name.autocomplete="off";name.autocapitalize="sentences";
+
+  const upper=createFieldGroup(form,"field-row");
+  const statusHolder=createFieldGroup(upper,"");
+  const typeHolder=createFieldGroup(upper,"");
+  const statusSelect=selectRow(statusHolder,"create-status","ステータス",[
+    ["Do","Do · 実行"],["Waiting","Waiting · 相手待ち"],
+    ["Someday","Someday · いつか"],["Thinking","Thinking · 検討"]
+  ]);
+  const levelSelect=selectRow(typeHolder,"create-level","タスク区分",[
+    ["子タスク","実行タスク"],["親タスク","親タスク"]
+  ]);
+
+  const parentBox=createFieldGroup(form,"");
+  const parentSelect=selectRow(parentBox,"create-parent","親タスク（任意）",
+    [["","紐づけなし"],...parentItems.map(p=>[p.id,p.name])]);
+  if(parentError)parentBox.append(node("p","field-note",
+    "親タスク一覧を完全に取得できませんでした。必要なら再度開き直してください。"));
+  const parentHelp=node("p","field-note",
+    "親タスクを選ぶと、そのProjectを自動継承します。");
+  parentBox.append(parentHelp);
+
+  const projectBox=createFieldGroup(form,"");
+  const projectSelect=selectRow(projectBox,"create-project","Project（任意）",
+    [["","指定なし"],...state.projects.map(p=>[p.id,p.name])]);
+
+  const dates=createFieldGroup(form,"field-row");
+  const dueHolder=createFieldGroup(dates,"");
+  const reminderHolder=createFieldGroup(dates,"");
+  const dueInput=inputRow(dueHolder,"create-due","期限（任意）","date");
+  const reminderInput=inputRow(reminderHolder,"create-reminder","再確認日（Waiting時）","date");
+
+  const prioritySelect=selectRow(form,"create-priority","優先度（任意）",[
+    ["","指定なし"],["High","High"],["Mid","Mid"],["Low","Low"]
+  ]);
+  const contextLabel=node("label",null,"メモ（任意）");
+  contextLabel.htmlFor="create-context";form.append(contextLabel);
+  const context=node("textarea");context.id="create-context";
+  context.name="create-context";context.rows=2;context.maxLength=1000;
+  context.placeholder="背景・次にやること";form.append(context);
+
+  function updateFields(){
+    parentBox.hidden=levelSelect.value==="親タスク";
+    if(parentBox.hidden)parentSelect.value="";
+    projectBox.hidden=Boolean(parentSelect.value);
+    if(projectBox.hidden)projectSelect.value="";
+    reminderHolder.hidden=statusSelect.value!=="Waiting";
+    if(reminderHolder.hidden)reminderInput.value="";
+  }
+  levelSelect.addEventListener("change",updateFields);
+  parentSelect.addEventListener("change",updateFields);
+  statusSelect.addEventListener("change",updateFields);
+  updateFields();
+
+  const submit=node("button","primary","Notionにタスクを登録 →");
+  submit.type="submit";form.append(submit);
+  form.append(node("p","field-note",
+    "登録後はDo/WaitingのみTasks一覧に表示されます。"));
+  form.addEventListener("submit",async event=>{
+    event.preventDefault();
+    if(state.busy)return;
+    const title=name.value.trim();
+    if(!title){name.focus();return;}
+    const to=statusSelect.value;
+    if(!window.confirm("「"+title+"」を "+to+" で登録しますか？"))return;
+    const payload={name:title,status:to,task_level:levelSelect.value};
+    if(prioritySelect.value)payload.priority=prioritySelect.value;
+    if(dueInput.value)payload.due_date=dueInput.value;
+    if(to==="Waiting"&&reminderInput.value)payload.reminder_date=reminderInput.value;
+    if(!parentBox.hidden&&parentSelect.value)payload.parent_task_id=parentSelect.value;
+    else if(projectSelect.value)payload.project_id=projectSelect.value;
+    if(context.value.trim())payload.context=context.value.trim();
+
+    setBusy(true);status("Notionにタスクを登録中…");
+    let created;
+    try{
+      created=await api("/api/mobile/task/create","POST",payload);
+      if(!created.id)throw new Error("作成IDが確認できません");
+    }catch(error){
+      status("登録結果を確認できません。重複防止のためNotionを確認してから再試行してください。");
+      return;
+    }finally{setBusy(false);}
+
+    closeDialog();
+    setTab("tasks");
+    try{await reload();}catch(error){status("タスクは登録されましたが一覧を再取得できません。更新を試してください。");return;}
+    if(created.verified===false){
+      status("タスクを作成しましたが最終確認は未了です。Notionで確認してください。");
+    }else if(to==="Someday"||to==="Thinking"){
+      status(title+" を "+to+" に登録しました（Tasks一覧には表示されません）。");
+    }else{
+      status(title+" を "+to+" に登録しました。");
+    }
+  });
+  body.append(form);
+  name.focus();
+ });
 }
 function refreshUI(){
  renderInbox();renderTasks();
@@ -301,6 +432,7 @@ function openTask(t){
 $("login-form").addEventListener("submit",login);
 $("lock").addEventListener("click",()=>{if(window.confirm("この端末の接続を解除しますか？"))logout();});
 $("refresh").addEventListener("click",()=>reload().catch(e=>status(e.message)));
+$("new-task").addEventListener("click",()=>openCreateTask().catch(e=>status(e.message)));
 $("modal-close").addEventListener("click",closeDialog);
 document.querySelector(".modal-scrim").addEventListener("click",closeDialog);
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeDialog();});

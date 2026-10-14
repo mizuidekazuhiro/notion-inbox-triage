@@ -16,6 +16,13 @@
   - 親に紐づく子タスク（親タスク名ごとにグループ）
   - 親タスク（案件管理用、折りたたみ）
   - 各タスク→ Done / Waiting / Do / Someday のいずれかに更新。
+- **「＋ タスク」から直接登録**：Notion Flowの上部に常時表示されるボタンから、Inboxを経由せずTasks DBへ登録。
+  - 必須：タスク名。初期値は `Do`・`子タスク`（独立した作業としても登録可）。
+  - 任意：`Status`（Do / Waiting / Someday / Thinking）、`Task Level`（子タスク / 親タスク）、Priority、Due Date、Waiting時のReminder Date、メモ（Context）、Project、Parent Task。
+  - 親タスクを選択するとProjectを自動継承。親子関係に矛盾するProject指定はエラーにして安全停止。
+  - 登録後はDo/Waitingだけが現行のTasks一覧に表示。Someday/ThinkingもNotionに保存されますが、現行一覧の対象外です。
+  - ステータスに合わせて `Since Do` / `Waiting Since` / `Since Someday` / `Since Thinking` を設定。`Triage Source = Manual (URL click)`、`Triage At`も記録。
+  - 通信失敗等で登録結果が不明な場合は、**同じタスクを繰り返し登録せずNotionで存在を確認**。
 - 両操作とも実行前に確認し、サーバーの結果を受けて一覧を再取得します。
 - プロジェクト・期限・親子Relationを勝手に変更しません。
 - Done/Waiting/Do/Somedayへ切り替えた際、既存のStage用日付（Done date / Waiting Since / Since Do / Since Someday）の**該当するものだけ**を更新します。既存の Reminder Date や Due Date は変更しません。
@@ -26,6 +33,7 @@
 - Notion API secret は Worker の中だけ。ブラウザに配布しません。
 - 認証キーはログイン時にのみ使用し、ブラウザ保存領域（`sessionStorage` / `localStorage`）には**保存しません**。代わりにサーバー署名済み `__Host-` Cookieを `HttpOnly; Secure; SameSite=Strict` で発行します。Cookieに元の認証キーは含めません。30日有効、残り7日を切ってアクセスすると延長します。端末の「解除」でCookieを削除します。
 - 変更は POST JSONのみ。同一Origin要求・JSON Content-Type・サイズ制限・UUID/ステータス検証・所属DBチェックを行います。Cookie認証での書き込みは、追加で `Origin` および `X-Notion-Flow: 1` ヘッダーを検証してCSRFを防ぎます。
+- 新規登録は認証付き `POST /api/mobile/task/create` のみ。親タスク候補は認証付き `GET /api/mobile/task/parents` から取得します。タスク名・日付・Status・Priority・親子ID・Project IDはサーバー側で検証します。
 - 他端末でステータスが変わっていた場合は409 Conflictで書き込みを拒否します。
 - CSP / no-store を設定。ユーザー提供タイトルは `textContent` で表示。
 - Service Workerは静的UIのシェルのみキャッシュし、NotionやAPIの情報はキャッシュしません。
@@ -38,6 +46,13 @@
 4. iPhoneのSafariから `https://notion-inbox-triage.kazuhiro-mizuide.workers.dev/mobile` にアクセス。
 5. 既存ショートカットが送っている `X-Shortcut-Token` を、アプリ内の認証画面に**一度だけ**入力して接続。次回からCookieで再ログインを省略します。Notion APIのintegration tokenではありません。
 6. iPhone Safariの共有メニュー→「ホーム画面に追加」で「Notion Flow」を追加。iOSによって表示文言が異なる場合があります。
+
+## 新規登録のiPhone操作
+1. ホーム画面で既存の **Notion Flow** を起動する。Scriptableの貼り替えは不要。
+2. 画面上部の **＋ タスク** をタップ。
+3. タスク名を入力し、必要ならステータス・優先度・期限・親タスク・Project・メモを指定して「Notionにタスクを登録」をタップ。
+4. 確認ダイアログでOKを選択。登録成功後はTasksへ自動で切り替え、Do/Waitingであれば一覧に反映される。
+5. 画面に追加機能が出ない場合は、一度Notion Flowを閉じて開き直し、必要ならSafariで `/mobile` を再読み込みする（ブラウザのService Workerキャッシュが残っている場合がある）。
 
 ## 受入試験（Notion実データの変更は明示的なテスト操作時のみ）
 - 既存のiOSショートカットが移動可能なままか。

@@ -37,7 +37,7 @@ export const html = `<!doctype html>
 <main id="dashboard" hidden>
 <div class="overview">
   <div><p class="eyebrow">WORKSPACE</p><h2 id="welcome">タスクを整理する</h2></div>
-  <button id="refresh" class="circle-button" aria-label="更新">↻</button>
+  <div class="overview-actions"><button id="new-task" class="create-button" type="button" aria-label="新しいタスクを登録"><span aria-hidden="true">＋</span> タスク</button><button id="refresh" class="circle-button" aria-label="更新">↻</button></div>
 </div>
 <nav class="tabs" aria-label="機能の切り替え">
  <button class="tab selected" id="tab-inbox" data-tab="inbox" aria-current="page"><span>Inbox</span><b id="inbox-count">—</b></button>
@@ -106,6 +106,18 @@ select{appearance:auto}
 .primary.secondary{background:rgba(137,190,210,.17);color:#dff4ff;border:1px solid var(--line);justify-content:center}
 .footnote{font-size:11px!important;line-height:1.65;color:#8da9ba!important;margin:17px 0 0!important}
 .overview{margin-top:-9px;margin-bottom:22px}.overview h2{font-size:25px}
+.overview-actions{display:flex;align-items:center;gap:7px}
+.create-button{background:linear-gradient(135deg,rgba(156,230,239,.28),rgba(81,172,191,.20));border:1px solid rgba(159,230,237,.5);color:#ddfaff;border-radius:14px;min-height:43px;padding:0 12px;font-weight:750;font-size:12px;box-shadow:inset 0 1px 0 rgba(255,255,255,.15);white-space:nowrap;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.create-button span{font-size:21px;line-height:0;vertical-align:-2px}
+.create-button:disabled{opacity:.55}
+.modal .create-form{display:block}
+.modal .create-form input,.modal .create-form select,.modal .create-form textarea{width:100%;min-height:45px;background:rgba(6,18,29,.65);color:#f5fbff}
+.modal .create-form textarea{padding:12px;resize:vertical;min-height:76px;border:1px solid rgba(173,213,232,.21);border-radius:13px;font:inherit;font-size:13px}
+.modal .create-form .field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.modal .field-note{font-size:11px;line-height:1.5;color:#9cb7c6;margin:8px 0}
+.modal .create-form label{margin-top:13px}
+.modal .create-form .primary{margin-top:20px}
+
 .tabs{display:grid;grid-template-columns:1fr 1fr;background:rgba(4,15,24,.45);padding:5px;border:1px solid var(--line);border-radius:18px;gap:6px}
 .tab{border:none;background:transparent;color:#8faaba;border-radius:13px;min-height:48px;font-weight:690;display:flex;align-items:center;justify-content:center;gap:10px}
 .tab.selected{background:rgba(110,191,213,.18);color:#edfaff;box-shadow:inset 0 1px 0 rgba(255,255,255,.1)}

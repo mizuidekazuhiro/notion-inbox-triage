@@ -204,8 +204,6 @@ test("authenticated creation endpoint rejects wrong method, CSRF and invalid inp
    {Cookie:auth,Origin:"https://evil.test"}),ENV)).status,403);
  assert.equal((await handleMobileApi(request("/api/mobile/task/create",{name:"",status:"Do"},
    {Cookie:auth}),ENV)).status,400);
- const raw=request("/api/mobile/task/create",{name:"A",status:"Do"},{Cookie:auth});
- assert.equal((await handleMobileApi(raw,ENV)).status,201===200?500:201); // overwritten by mock below
 });
 test("verified creation returns 201 and ID without silently writing again",async()=>{
  const auth=await cookie();

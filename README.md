@@ -473,10 +473,13 @@ Tasks DB で `Status=Done` かつ未来 `Event Date` のタスクを検知し、
 - Scheduler Error = 空
 
 ### 送信失敗時の更新
+- 送信対象があれば、Notion書込み前にSMTP認証を確認。事前確認に失敗した場合はNotionを変更せず、実行を失敗にする（既存のエラー表示は残る）
+- 事前確認後の送信失敗では以下を更新し、実行を失敗にする。認証失敗なら残りの送信試行を停止
 - Send Scheduler = 未チェックのまま（false）
 - Scheduler Sent At = 空のまま
 - Scheduler UID = uid
-- Scheduler Error = エラー内容
+- Scheduler Error = 秘密情報やSMTP応答原文を含まないエラー区分
+- 送信後のNotion更新だけが失敗した場合も実行は失敗。`email_sent_but_notion_update_failed` または `sending` の予定は自動再送しない
 
 ### Notionに必要なプロパティ
 - Event Date（date）
@@ -518,8 +521,13 @@ Task Event Scheduler の送信先はデフォルトで既存 Tasks Digest と同
 ### 予定時間ルール
 - Event Date に end があれば end を利用
 - end がない場合は start + 180 分（`TASK_SCHEDULER_DEFAULT_DURATION_MIN` で変更可）
-- 日付のみ（時刻なし）の場合は JST 09:00-12:00 として送信
+- 日付のみの単日予定（endなし）は従来通り JST 09:00-12:00 として送信
+- 日付のみの範囲予定は終日予定として最終日を含めて送信（例：10/27–31 → ICSの終了日は排他的な11/1）
 
 ### 実行方法
 - GitHub Actions: `.github/workflows/send_task_event_scheduler.yml` を `workflow_dispatch` 実行
 - ローカル: `npm run send:task-scheduler`
+
+### Gmail認証の復旧
+操作・影響範囲・確認結果は [SMTP調査と復旧手順](docs/SMTP_RECOVERY_JA.md) を参照。
+`Verify Gmail SMTP (no email)` は認証確認だけを行い、メール送信・Notion更新を行わない。

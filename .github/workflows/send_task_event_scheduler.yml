@@ -5,9 +5,14 @@ on:
   schedule:
     - cron: '*/30 * * * *'
 
+concurrency:
+  group: task-event-scheduler
+  cancel-in-progress: false
+
 jobs:
   send-task-scheduler:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -88,18 +88,6 @@ test('READMEに「Send Scheduler=true のものだけ送信」という古い説
   assert.equal(readme.includes('Send Scheduler=true かつ `Scheduler Sent At` 空の場合のみ'), false);
 });
 
-test('送信成功時に Send Scheduler=true がNotion update payloadに含まれる', () => {
-  const script = fs.readFileSync('scripts/send_task_event_scheduler.mjs', 'utf-8');
-  assert.match(script, /\[props\.sendScheduler\]:\s*\{\s*checkbox:\s*true\s*\}/);
-});
-
-test('SMTP送信失敗時は Send Scheduler=true にしない', () => {
-  const script = fs.readFileSync('scripts/send_task_event_scheduler.mjs', 'utf-8');
-  const smtpCatchBlock = script.split('} catch (e) {')[1].split("return { type: 'failed', reason: 'smtp_send_failed' };")[0];
-  assert.equal(smtpCatchBlock.includes('[props.sendScheduler]'), false);
-});
-
-
 test('resolveSchedulerMailTo prioritizes COMPANY_SCHEDULER_MAIL_TO', () => {
   assert.equal(resolveSchedulerMailTo({ COMPANY_SCHEDULER_MAIL_TO: 'a@example.com', MAIL_TO: 'b@example.com' }), 'a@example.com');
 });

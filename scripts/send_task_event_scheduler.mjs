@@ -2,6 +2,7 @@ import nodemailer from 'nodemailer';
 import { Client } from '@notionhq/client';
 import { buildIcs, buildSchedulerUid, isSchedulerTarget, resolveEventWindow } from '../src/utils/taskScheduler.js';
 import { TASK_SCHEDULER_DEFAULTS, fetchAllTasks, resolveSchedulerMailTo } from '../src/utils/taskSchedulerConfig.js';
+import { gmailSmtpOptions, smtpFailure, verifySmtp } from '../src/utils/gmailSmtp.js';
 
 const DEFAULTS = TASK_SCHEDULER_DEFAULTS;
 
@@ -59,26 +60,54 @@ export async function processPage({ page, now, lookahead, durationMin, props, do
   const uid = buildSchedulerUid(page.id, event.start);
   const notionUrl = page.url;
   const body = `タスク名: ${title}\nEvent Date: ${page.properties[props.eventDate].date.start}\n開始: ${event.start}\n終了: ${event.end}\nNotion: ${notionUrl}\n自動送信です。`;
-  const ics = buildIcs({ uid, summary: title, description: `${body}\n二重送信防止のため送信後にScheduler Sent Atを更新します。`, startIso: event.start, endIso: event.end, url: notionUrl });
+  const ics = buildIcs({ uid, summary: title, description: `${body}\n二重送信防止のため送信後にScheduler Sent Atを更新します。`, startIso: event.start, endIso: event.end, allDay: event.allDay, url: notionUrl });
 
   await notion.pages.update({ page_id: page.id, properties: { [props.uid]: rt(uid), [props.error]: rt('sending') } });
 
   try {
     await transporter.sendMail({ from: mail.from, to: mail.to, cc: mail.cc, bcc: mail.bcc, subject: `[Scheduler] ${title}`, text: body, attachments: [{ filename: 'invite.ics', content: ics, contentType: 'text/calendar; method=REQUEST; charset=UTF-8' }] });
   } catch (e) {
-    await notion.pages.update({ page_id: page.id, properties: { [props.uid]: rt(uid), [props.error]: rt(String(e?.message || e).slice(0, 1500)) } });
-    return { type: 'failed', reason: 'smtp_send_failed' };
+    const failure = smtpFailure(e);
+    await notion.pages.update({ page_id: page.id, properties: { [props.uid]: rt(uid), [props.error]: rt(failure.message) } });
+    return { type: 'failed', reason: failure.reason };
   }
 
   try {
     await notion.pages.update({ page_id: page.id, properties: { [props.sendScheduler]: { checkbox: true }, [props.sentAt]: { date: { start: new Date().toISOString() } }, [props.uid]: rt(uid), [props.error]: rt('') } });
     return { type: 'sent', pageId: page.id, title, eventStart: event.start, eventEnd: event.end, uid, notionUrl, inferredFromDateOnly: event.inferredFromDateOnly };
   } catch (e) {
-    const marker = `email_sent_but_notion_update_failed: ${String(e?.message || e).slice(0, 1200)}`;
+    const marker = 'email_sent_but_notion_update_failed: review delivery before retrying';
     try { await notion.pages.update({ page_id: page.id, properties: { [props.uid]: rt(uid), [props.error]: rt(marker) } }); } catch {}
-    console.error(JSON.stringify({ action: 'email_sent_but_notion_update_failed', pageId: page.id, title, uid, eventStart: event.start, eventEnd: event.end, error: String(e?.message || e) }));
-    return { type: 'skip', reason: 'possible_already_sent' };
+    console.error(JSON.stringify({ action: 'email_sent_but_notion_update_failed', pageId: page.id }));
+    return { type: 'failed', reason: 'possible_already_sent' };
   }
+}
+
+export async function runSchedulerBatch({ tasks, ...options }) {
+  const { props, doneValue, now, lookahead, transporter } = options;
+  const hasTargets = tasks.some(page => {
+    const target = isSchedulerTarget({ page, props, doneValue, now });
+    return target.ok && new Date(target.event.start) <= lookahead;
+  });
+  // A shared credential failure must not rewrite every eligible Notion record.
+  if (hasTargets) await verifySmtp(transporter);
+  const summary = { fetchedTotal: tasks.length, checkedTotal: 0, targetTotal: 0, sent: 0, failed: 0, skippedByReason: {} };
+  for (const page of tasks) {
+    summary.checkedTotal++;
+    const result = await processPage({ page, ...options });
+    if (result.type === 'sent') { summary.targetTotal++; summary.sent++; }
+    else if (result.type === 'failed') {
+      summary.targetTotal++; summary.failed++;
+      increment(summary.skippedByReason, result.reason);
+      // Authentication can be revoked after preflight. Stop further attempts.
+      if (result.reason === 'smtp_auth_failed') break;
+    } else increment(summary.skippedByReason, result.reason);
+  }
+  return summary;
+}
+
+export function assertSchedulerSucceeded(summary) {
+  if (summary.failed > 0) throw new Error(`scheduler_failed: ${summary.failed} target(s) failed; inspect summary before retrying`);
 }
 
 export async function main() {
@@ -95,22 +124,23 @@ export async function main() {
   const statusPropType = db.properties?.[props.status]?.type;
   const tasks = await fetchAllTasks({ queryFn: notion.databases.query.bind(notion.databases), databaseId: req('TASKS_DB_ID'), statusPropName: props.status, statusPropType, doneValue });
   const mailTo = resolveSchedulerMailTo(process.env);
-  const transporter = nodemailer.createTransport({ host: 'smtp.gmail.com', port: 587, secure: false, auth: { user: req('GMAIL_USER'), pass: req('GMAIL_APP_PASSWORD') } });
+  const smtpOptions = gmailSmtpOptions();
+  const transporter = nodemailer.createTransport(smtpOptions);
   const now = new Date();
   const lookahead = new Date(now.getTime() + lookaheadDays * 86400000);
 
-  let checkedTotal = 0; let targetTotal = 0; let sent = 0; let failed = 0;
-  const skippedByReason = {};
-  for (const page of tasks) {
-    checkedTotal++;
-    const result = await processPage({ page, now, lookahead, durationMin, props, doneValue, notion, transporter, mail: { from: req('GMAIL_USER'), to: mailTo, cc: process.env.COMPANY_SCHEDULER_MAIL_CC, bcc: process.env.COMPANY_SCHEDULER_MAIL_BCC } });
-    if (result.type === 'sent') { targetTotal++; sent++; console.log(JSON.stringify({ level: 'info', action: 'sent', ...result })); }
-    else if (result.type === 'failed') { targetTotal++; failed++; increment(skippedByReason, result.reason); }
-    else { increment(skippedByReason, result.reason); }
+  try {
+    const summary = await runSchedulerBatch({ tasks, now, lookahead, durationMin, props, doneValue, notion, transporter, mail: { from: smtpOptions.auth.user, to: mailTo, cc: process.env.COMPANY_SCHEDULER_MAIL_CC, bcc: process.env.COMPANY_SCHEDULER_MAIL_BCC } });
+    console.log(JSON.stringify(summary));
+    assertSchedulerSucceeded(summary);
+  } finally {
+    transporter.close();
   }
-  console.log(JSON.stringify({ fetchedTotal: tasks.length, checkedTotal, targetTotal, sent, failed, skippedByReason }));
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  main().catch((e) => { console.error(e); process.exit(1); });
+  main().catch((error) => {
+    console.error(error?.message?.startsWith('smtp_') ? error.message : 'scheduler_failed: check configuration, SMTP verification and batch summary');
+    process.exitCode = 1;
+  });
 }

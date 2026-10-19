@@ -11,6 +11,14 @@ export function resolveEventWindow({ notionDate, defaultDurationMin = 180, now =
 
   if (!hasTime) {
     const day = notionDate.start;
+    if (notionDate.end && /^\d{4}-\d{2}-\d{2}$/.test(notionDate.end)) {
+      // Notion's date-only range includes its last date; iCalendar DTEND excludes it.
+      const endExclusive = new Date(Date.parse(`${notionDate.end}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
+      return {
+        start: `${day}T00:00:00+09:00`, end: `${endExclusive}T00:00:00+09:00`,
+        timezone: tz, inferredFromDateOnly: true, allDay: true
+      };
+    }
     return {
       start: `${day}T09:00:00+09:00`,
       end: `${day}T12:00:00+09:00`,
@@ -45,7 +53,7 @@ export function isSchedulerTarget({ page, props, doneValue, now = new Date() }) 
   return { ok: true, event };
 }
 
-export function buildIcs({ uid, summary, description, startIso, endIso, timezone = DEFAULT_TIMEZONE, url }) {
+export function buildIcs({ uid, summary, description, startIso, endIso, timezone = DEFAULT_TIMEZONE, url, allDay = false }) {
   const escape = (s) => String(s || '').replace(/\\/g, '\\\\').replace(/,/g, '\\,').replace(/;/g, '\\;').replace(/\n/g, '\\n');
   const dtStamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
   const fmtLocal = (iso) => {
@@ -62,8 +70,8 @@ export function buildIcs({ uid, summary, description, startIso, endIso, timezone
     'BEGIN:VEVENT',
     `UID:${escape(uid)}`,
     `DTSTAMP:${dtStamp}`,
-    `DTSTART:${fmtLocal(startIso)}`,
-    `DTEND:${fmtLocal(endIso)}`,
+    allDay ? `DTSTART;VALUE=DATE:${startIso.slice(0, 10).replace(/-/g, '')}` : `DTSTART:${fmtLocal(startIso)}`,
+    allDay ? `DTEND;VALUE=DATE:${endIso.slice(0, 10).replace(/-/g, '')}` : `DTEND:${fmtLocal(endIso)}`,
     'CLASS:PRIVATE',
     `SUMMARY:${escape(summary)}`,
     `DESCRIPTION:${escape(description)}`,

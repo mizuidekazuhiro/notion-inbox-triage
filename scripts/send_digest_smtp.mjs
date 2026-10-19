@@ -1,4 +1,6 @@
 import nodemailer from "nodemailer";
+import { gmailSmtpOptions, smtpFailure } from '../src/utils/gmailSmtp.js';
+import { pathToFileURL } from 'node:url';
 
 function requireEnv(key) {
   const value = process.env[key];
@@ -25,26 +27,21 @@ async function fetchDigest(digestUrl) {
   return res.json();
 }
 
-async function sendDigest({ subject, body, mailTo, gmailUser, gmailPassword }) {
-  const transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 587,
-    secure: false,
-    auth: {
-      user: gmailUser,
-      pass: gmailPassword
-    }
-  });
+export async function sendDigest({ subject, body, mailTo, gmailUser, gmailPassword, createTransport = nodemailer.createTransport }) {
+  const options = gmailSmtpOptions({ GMAIL_USER: gmailUser, GMAIL_APP_PASSWORD: gmailPassword });
+  const transporter = createTransport(options);
 
-  const info = await transporter.sendMail({
-    from: gmailUser,
-    to: mailTo,
-    subject,
-    text: stripHtml(body),
-    html: body
-  });
-
-  return info;
+  try {
+    return await transporter.sendMail({
+      from: options.auth.user,
+      to: mailTo,
+      subject,
+      text: stripHtml(body),
+      html: body
+    });
+  } finally {
+    transporter.close();
+  }
 }
 
 async function main() {
@@ -73,8 +70,10 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error("Failed to send digest via SMTP.");
-  console.error(error);
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error('digest_failed: check digest endpoint and mail configuration');
+    if (error?.code || error?.responseCode) console.error(smtpFailure(error).message);
+    process.exitCode = 1;
+  });
+}

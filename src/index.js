@@ -7,6 +7,7 @@ import { handleConfirm, handleTaskUpdate } from "./routes/confirm";
 import { handleProjectsShortcut, handleProjectsChoices } from "./routes/projects";
 import { handleWidgetTasksToday } from "./routes/widgetTasks";
 import { handleWidgetScheduleWeek } from "./routes/widgetScheduleWeek.js";
+import { handleWidgetScheduleCalendar } from "./routes/widgetScheduleCalendar.js";
 import { handleMobileAsset, handleMobileApi } from "./routes/mobileApp.js";
 import { sanitizeSubject, readMessageBody } from "./email/parseEmail";
 import { createInboxItem } from "./notion/inboxCreate";
@@ -50,6 +51,10 @@ export default {
 
     if (url.pathname === "/api/widget/schedule/week") {
       return handleWidgetScheduleWeek(request, env);
+    }
+
+    if (url.pathname === "/api/widget/schedule/calendar") {
+      return handleWidgetScheduleCalendar(request, env);
     }
 
     if (url.pathname === "/api/projects/shortcut") {
@@ -185,3 +190,4 @@ function buildRawText({ bodyText, from, msgId, receivedIso }) {
 
   return [bodyText?.trim() || "", "", ...metadataLines].join("\n");
 }
+

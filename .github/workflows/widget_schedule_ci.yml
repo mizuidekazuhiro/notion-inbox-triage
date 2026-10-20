@@ -9,6 +9,10 @@ on:
       - "scripts/NotionWeekSchedule.js"
       - "test/widget-schedule-week.test.js"
       - "src/index.js"
+      - "src/routes/widgetScheduleCalendar.js"
+      - "scripts/NotionCalendarFourWeeks.js"
+      - "test/widget-schedule-calendar.test.js"
+      - "test/scriptable-calendar.test.js"
 permissions:
   contents: read
 jobs:
@@ -25,5 +29,8 @@ jobs:
           node --check src/index.js
           node --check src/routes/widgetScheduleWeek.js
           node --check scripts/NotionWeekSchedule.js
+          node --check src/routes/widgetScheduleCalendar.js
+          node --check scripts/NotionCalendarFourWeeks.js
       - name: Run repository tests
         run: npm test
+

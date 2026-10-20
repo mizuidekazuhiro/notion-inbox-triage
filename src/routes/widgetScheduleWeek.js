@@ -26,7 +26,8 @@ function selectUpcomingEvents(pages, now, windowEnd) {
   return pages.flatMap(page => {
     if (page.id && seen.has(page.id)) return [];
     if (page.id) seen.add(page.id);
-    if (page.properties?.Status?.select?.name === "Drop") return [];
+    if (page.archived || page.in_trash || page.properties?.Status?.select?.name === "Drop" ||
+        page.properties?.Status?.status?.name === "Drop") return [];
     const date = page.properties?.[EVENT_DATE_PROPERTY]?.date;
     if (!date?.start) return [];
     const startMs = eventTimeMs(date.start), endMs = eventEndMs(date);
@@ -48,7 +49,7 @@ async function queryEventDatePages(env, fromDate, untilExclusive) {
     const query = {
       page_size: 100,
       filter: {and: [
-        {property: EVENT_DATE_PROPERTY, date: {on_or_after: fromDate}},
+        ...(fromDate ? [{property: EVENT_DATE_PROPERTY, date: {on_or_after: fromDate}}] : []),
         {property: EVENT_DATE_PROPERTY, date: {before: untilExclusive}}
       ]},
       sorts: [{property: EVENT_DATE_PROPERTY, direction: "ascending"}]
@@ -96,4 +97,5 @@ export async function handleWidgetScheduleWeek(request, env) {
     return jsonResponse({ok:false,error:"schedule_query_failed"},502);
   }
 }
-export {parseScheduleLimit,eventTimeMs,eventEndMs,selectUpcomingEvents};
+export {parseScheduleLimit,eventTimeMs,eventEndMs,selectUpcomingEvents,queryEventDatePages};
+

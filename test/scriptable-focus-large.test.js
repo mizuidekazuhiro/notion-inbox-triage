@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 
 const SOURCE=readFileSync(new URL("../scripts/NotionFocusLarge.js",import.meta.url),"utf8");
 const APP_URL="https://notion-inbox-triage.kazuhiro-mizuide.workers.dev/mobile?tab=tasks";
-const API_URL="https://notion-inbox-triage.kazuhiro-mizuide.workers.dev/api/mobile/tasks";
+const API_URL="https://notion-inbox-triage.kazuhiro-mizuide.workers.dev/api/mobile/tasks?scope=focus";
 const TOKEN_KEY="NOTION_WEEK_WIDGET_SHORTCUT_TOKEN";
 
 class Stack {

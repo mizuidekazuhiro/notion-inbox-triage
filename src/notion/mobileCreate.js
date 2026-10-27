@@ -1,3 +1,4 @@
+import { validSchedule, scheduleProperties } from "../utils/taskSchedule.js";
 import { notionHeaders } from "./client.js";
 import { getMobilePage, isUuid, pageBelongsToDatabase } from "./mobileData.js";
 
@@ -5,7 +6,7 @@ const CREATE_STATUSES = Object.freeze(["Do","Waiting","Someday","Thinking"]);
 const TASK_LEVELS = Object.freeze(["子タスク","親タスク"]);
 const PRIORITIES = Object.freeze(["High","Mid","Low"]);
 const ALLOWED_FIELDS = new Set([
-  "name","status","task_level","priority","due_date","reminder_date",
+  "name","status","task_level","priority","start_date","due_date","reminder_date",
   "project_id","parent_task_id","context"
 ]);
 const TITLE_LIMIT=240;
@@ -43,7 +44,7 @@ export function validMobileTaskCreate(input) {
   const level=input.task_level||"子タスク";
   if(!TASK_LEVELS.includes(level))return false;
   if(filled(input.priority)&&!PRIORITIES.includes(input.priority))return false;
-  if(filled(input.due_date)&&!validDate(input.due_date))return false;
+  if(!validSchedule(input.start_date,input.due_date))return false;
   if(filled(input.reminder_date)&&
     ((input.status||"Do")!=="Waiting"||!validDate(input.reminder_date)))return false;
   if(filled(input.project_id)&&!isUuid(input.project_id))return false;
@@ -140,7 +141,12 @@ export async function createMobileTask(env,input,now=new Date()) {
   if(status==="Someday")props["Since Someday"]={date:{start:iso}};
   if(status==="Thinking")props["Since Thinking"]={date:{start:iso}};
   if(filled(input.priority))props.Priority={select:{name:input.priority}};
-  if(filled(input.due_date))props["Due Date"]={date:{start:input.due_date}};
+  if(filled(input.start_date)||filled(input.due_date)){
+    const dates=scheduleProperties(input.start_date||null,input.due_date||null);
+    // Omit empty Start Date on legacy deadline-only submissions.
+    if(input.start_date)props["Start Date"]=dates["Start Date"];
+    if(input.due_date)props["Due Date"]=dates["Due Date"];
+  }
   if(status==="Waiting"&&filled(input.reminder_date)){
     props["Reminder Date"]={date:{start:input.reminder_date}};
   }

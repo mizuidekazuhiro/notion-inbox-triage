@@ -1,3 +1,5 @@
+import { updateMobileSchedule } from "../notion/mobileSchedule.js";
+import { readTaskSchedule } from "../utils/taskSchedule.js";
 import { html, css, manifest, serviceWorker } from "../mobile/shell.js";
 import { clientJs } from "../mobile/client.js";
 import { mobileSvgIcon, mobilePngIcon } from "../mobile/icon.js";
@@ -129,7 +131,8 @@ export async function handleMobileApi(request,env) {
   "/api/mobile/session/start":"POST",
   "/api/mobile/session/logout":"POST",
   "/api/mobile/inbox/move":"POST",
-  "/api/mobile/task/status":"POST"
+  "/api/mobile/task/status":"POST",
+  "/api/mobile/task/schedule":"POST"
  };
  if(!Object.hasOwn(known,path))return protectedJson({ok:false,error:"not_found"},404);
  if(request.method!==known[path])return protectedJson({ok:false,error:"method_not_allowed"},405);
@@ -169,11 +172,26 @@ export async function handleMobileApi(request,env) {
   return protectedJson({ok:false,error:"origin_forbidden"},403);
  try {
   if(path==="/api/mobile/inbox")return protectedJson({ok:true,...await listMobileInbox(env)});
-  if(path==="/api/mobile/tasks")return protectedJson({ok:true,...await listMobileTasks(env)});
+  if(path==="/api/mobile/tasks"){
+    const result=await listMobileTasks(env);
+    const scope=new URL(request.url).searchParams.get("scope")||"focus";
+    if(!["all","focus"].includes(scope))return protectedJson({ok:false,error:"invalid_scope"},400);
+    const all=result.items;
+    const items=scope==="all"?all:all.filter(t=>t.is_parent||t.focus_state==="now");
+    return protectedJson({ok:true,...result,items,count:items.length,total_count:all.length,
+      upcoming_count:all.filter(t=>!t.is_parent&&t.focus_state==="upcoming").length,
+      unscheduled_count:all.filter(t=>!t.is_parent&&t.focus_state==="unscheduled").length,
+      blocked_count:all.filter(t=>!t.is_parent&&t.focus_state==="blocked").length,scope});
+  }
   if(path==="/api/mobile/projects")return protectedJson({ok:true,...await listMobileProjects(env)});
   if(path==="/api/mobile/task/parents")return protectedJson({ok:true,...await listMobileParentTasks(env)});
   let data;try{data=await bodyJson(request);}
   catch(_){return protectedJson({ok:false,error:"invalid_payload"},400);}
+  if(path==="/api/mobile/task/schedule"){
+    const result=await updateMobileSchedule(env,data);
+    const {status:code,...body}=result;
+    return protectedJson(body,code);
+  }
   if(path==="/api/mobile/task/create"){
     if(!validMobileTaskCreate(data)){
       return protectedJson({ok:false,error:"invalid_task_create"},400);
@@ -186,7 +204,9 @@ export async function handleMobileApi(request,env) {
       verified=pageBelongsToDatabase(page,env.TASKS_DB_ID) &&
         page.properties?.Status?.select?.name===created.status &&
         (page.properties?.["名前"]?.title||[]).map(t=>t.plain_text||t.text?.content||"")
-          .join("")===created.name;
+          .join("")===created.name &&
+        readTaskSchedule(page.properties).start_date===(data.start_date||null) &&
+        readTaskSchedule(page.properties).due_date===(data.due_date||null);
     }catch(error){console.warn("mobile_task_create_verification_unavailable");}
     return protectedJson({ok:true,...created,verified},201);
   }

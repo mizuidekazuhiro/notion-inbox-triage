@@ -3,7 +3,7 @@ export const clientJs = `
 (function(){
 const $ = id => document.getElementById(id);
 const storeKey = "notion_flow_session_token";
-const state = {token:"",loggedIn:false,inbox:[],tasks:[],projects:[],tab:"inbox",filter:"all",busy:false};
+const state = {token:"",loggedIn:false,inbox:[],tasks:[],projects:[],tab:"inbox",filter:"all",period:"now",busy:false};
 const labels = {Do:"Do · 実行",Waiting:"Waiting · 相手待ち",Done:"Done · 完了",Someday:"Someday · いつか",Thinking:"Thinking · 検討",Drop:"Drop · 取下げ"};
 const MOVE = ["Do","Waiting","Someday","Thinking","Done","Drop"];
 const NEXT = ["Done","Waiting","Do","Someday"];
@@ -111,6 +111,31 @@ function createFieldGroup(parent,className){
  const div=node("div",className);
  parent.append(div);return div;
 }
+function todayKey(){return new Date(Date.now()+9*3600000).toISOString().slice(0,10);}
+function shiftedDay(key,days){return new Date(Date.parse(key+"T00:00:00Z")+days*86400000).toISOString().slice(0,10);}
+function scheduleFields(form,prefix,startValue,dueValue){
+ const dates=createFieldGroup(form,"field-row");
+ const startBox=createFieldGroup(dates,"");
+ const dueBox=createFieldGroup(dates,"");
+ const start=inputRow(startBox,prefix+"-start","いつから（開始予定日）","date",startValue);
+ const due=inputRow(dueBox,prefix+"-due","いつまで（期限）","date",dueValue);
+ const shortcuts=createFieldGroup(form,"date-shortcuts");
+ const today=todayKey();
+ const day=new Date(today+"T00:00:00Z").getUTCDay();
+ const nextMonday=shiftedDay(today,day===0?1:8-day);
+ for(const [text,value] of [["今日から",today],["明日から",shiftedDay(today,1)],["来週から",nextMonday],["開始日なし",""]]){
+  const b=node("button","date-shortcut",text);b.type="button";
+  b.addEventListener("click",()=>{start.value=value;validate();});shortcuts.append(b);
+ }
+ function validate(){
+  const invalid=Boolean(start.value&&due.value&&start.value>due.value);
+  due.setCustomValidity(invalid?"期限は開始予定日以降にしてください":"");
+  return !invalid;
+ }
+ start.addEventListener("change",validate);due.addEventListener("change",validate);
+ form.append(node("p","field-note","日付は両方とも任意です。開始日だけ・期限だけでも登録できます。"));
+ validate();return {start,due,validate};
+}
 async function openCreateTask(){
  if(state.busy||!state.loggedIn)return;
  setBusy(true);
@@ -156,10 +181,9 @@ async function openCreateTask(){
   const projectSelect=selectRow(projectBox,"create-project","Project（任意）",
     [["","指定なし"],...state.projects.map(p=>[p.id,p.name])]);
 
-  const dates=createFieldGroup(form,"field-row");
-  const dueHolder=createFieldGroup(dates,"");
-  const reminderHolder=createFieldGroup(dates,"");
-  const dueInput=inputRow(dueHolder,"create-due","期限（任意）","date");
+  const schedule=scheduleFields(form,"create",null,null);
+  const dueInput=schedule.due;
+  const reminderHolder=createFieldGroup(form,"");
   const reminderInput=inputRow(reminderHolder,"create-reminder","再確認日（Waiting時）","date");
 
   const prioritySelect=selectRow(form,"create-priority","優先度（任意）",[
@@ -191,12 +215,14 @@ async function openCreateTask(){
   form.addEventListener("submit",async event=>{
     event.preventDefault();
     if(state.busy)return;
+    if(!schedule.validate()){dueInput.reportValidity();return;}
     const title=name.value.trim();
     if(!title){name.focus();return;}
     const to=statusSelect.value;
     if(!window.confirm("「"+title+"」を "+to+" で登録しますか？"))return;
     const payload={name:title,status:to,task_level:levelSelect.value};
     if(prioritySelect.value)payload.priority=prioritySelect.value;
+    if(schedule.start.value)payload.start_date=schedule.start.value;
     if(dueInput.value)payload.due_date=dueInput.value;
     if(to==="Waiting"&&reminderInput.value)payload.reminder_date=reminderInput.value;
     if(!parentBox.hidden&&parentSelect.value)payload.parent_task_id=parentSelect.value;
@@ -214,6 +240,8 @@ async function openCreateTask(){
     }finally{setBusy(false);}
 
     closeDialog();
+    state.period="all";
+    document.querySelectorAll("[data-period-filter]").forEach(b=>b.classList.toggle("selected",b.dataset.periodFilter==="all"));
     setTab("tasks");
     try{await reload();}catch(error){status("タスクは登録されましたが一覧を再取得できません。更新を試してください。");return;}
     if(created.verified===false){
@@ -238,7 +266,7 @@ async function reload(){
  try{
    const answers=await Promise.allSettled([
      api("/api/mobile/inbox"),
-     api("/api/mobile/tasks"),
+     api("/api/mobile/tasks?scope=all"),
      api("/api/mobile/projects")
    ]);
    let failures=0;
@@ -363,7 +391,12 @@ function openMove(item){
  });
 }
 function formatTaskMeta(t){
- const fragments=[t.due_date?"期限 "+safeDate(t.due_date):"期限なし"];
+ const fullDate=value=>value ? value.split("-").map(Number).join("/") : "";
+ const period=t.start_date&&t.due_date ? fullDate(t.start_date)+"〜"+fullDate(t.due_date) :
+   t.start_date ? fullDate(t.start_date)+"から" : t.due_date ? fullDate(t.due_date)+"まで" : "日付未設定";
+ const fragments=[period];
+ if(t.focus_state==="blocked")fragments.push("前工程待ち");
+ else if(t.focus_state==="upcoming")fragments.push("開始前・確認前");
  if(t.priority)fragments.push(t.priority);
  if(t.waiting_since&&t.status==="Waiting")fragments.push("待機開始 "+safeDate(t.waiting_since));
  return fragments.join(" · ");
@@ -380,8 +413,20 @@ function group(parent,name,subtitle,items){
 }
 function renderTasks(){
  const root=$("tasks-list");clear(root);
- const filtered=state.tasks.filter(t=>state.filter==="all"||t.status===state.filter);
- if(!filtered.length){root.append(node("div","empty","該当するDo / Waitingタスクはありません。"));return;}
+ const today=todayKey(),weekEnd=shiftedDay(today,7);
+ const all=state.tasks.filter(t=>state.filter==="all"||t.status===state.filter);
+ const filtered=all.filter(t=>{
+   if(state.period==="all")return true;
+   if(t.is_parent)return false;
+   if(t.focus_state==="now")return true;
+   if(state.period!=="week"||t.focus_state==="blocked"||t.focus_state==="unscheduled")return false;
+   if(t.start_date&&t.start_date>weekEnd)return false;
+   const next=t.status==="Waiting"?(t.reminder_date||t.start_date):(t.start_date||t.due_date);
+   return Boolean(next&&next<=weekEnd);
+ });
+ const count=kind=>all.filter(t=>!t.is_parent&&t.focus_state===kind).length;
+ $("task-period-note").textContent="先の予定 "+count("upcoming")+"件 · 日付未設定 "+count("unscheduled")+"件 · 前工程待ち "+count("blocked")+"件（「すべて」で確認）";
+ if(!filtered.length){root.append(node("div","empty","この表示に該当するタスクはありません。「すべて」で先の予定・日付未設定も確認できます。"));return;}
  const independent=filtered.filter(t=>!t.is_parent&&!t.parent_id&&t.task_level);
  const unclassified=filtered.filter(t=>!t.is_parent&&!t.parent_id&&!t.task_level);
  const underParent=filtered.filter(t=>!t.is_parent&&t.parent_id);
@@ -407,6 +452,8 @@ function openTask(t){
    t.is_parent?"親タスク（案件管理用）":"現在："+t.status;
  openDialog(t.is_parent?"PROJECT TASK":"TASK STATUS",t.name,description,body=>{
   const meta=node("p","help",formatTaskMeta(t));body.append(meta);
+  const edit=node("button","primary secondary","開始予定日・期限を編集");edit.type="button";
+  edit.addEventListener("click",()=>openSchedule(t));body.append(edit);
   const choices=node("div","choice-grid");
   body.append(choices);
   for(const next of NEXT){
@@ -429,6 +476,31 @@ function openTask(t){
   const link=notionLink(t.url);if(link)body.append(link);
  });
 }
+function openSchedule(t){
+ openDialog("TASK / PERIOD",t.name,"開始予定日と期限を変更します。実際の完了日は変更しません。",body=>{
+  const form=node("form","create-form");
+  const fields=scheduleFields(form,"edit",t.start_date,t.due_date);
+  const save=node("button","primary","期間を保存");save.type="submit";form.append(save);
+  const message=node("p","field-note");form.append(message);
+  form.addEventListener("submit",async event=>{
+   event.preventDefault();if(state.busy)return;
+   if(!fields.validate()){fields.due.reportValidity();return;}
+   setBusy(true);message.textContent="保存中…";
+   try{
+    const result=await api("/api/mobile/task/schedule","POST",{
+     task_id:t.id,start_date:fields.start.value||null,due_date:fields.due.value||null,
+     expected_revision:t.schedule_revision
+    });
+    if(result.verified!==true){
+     save.disabled=true;message.textContent="更新処理は実行されましたが最終確認できません。一覧を更新して確認してください。";
+     return;
+    }
+    state.busy=false;closeDialog();await reload();status("開始予定日・期限を更新しました");
+   }catch(error){message.textContent=error.message;}
+   finally{setBusy(false);}
+  });body.append(form);
+ });
+}
 $("login-form").addEventListener("submit",login);
 $("lock").addEventListener("click",()=>{if(window.confirm("この端末の接続を解除しますか？"))logout();});
 $("refresh").addEventListener("click",()=>reload().catch(e=>status(e.message)));
@@ -441,6 +513,11 @@ document.querySelectorAll("[data-status-filter]").forEach(button=>button.addEven
   state.filter=button.dataset.statusFilter;
   document.querySelectorAll("[data-status-filter]").forEach(other=>other.classList.toggle("selected",other===button));
   renderTasks();
+}));
+document.querySelectorAll("[data-period-filter]").forEach(button=>button.addEventListener("click",()=>{
+ state.period=button.dataset.periodFilter;
+ document.querySelectorAll("[data-period-filter]").forEach(other=>other.classList.toggle("selected",other===button));
+ renderTasks();
 }));
 // Open the Tasks tab directly when launched from the Notion Focus widget.
 setTab(new URLSearchParams(window.location.search).get("tab")==="tasks"?"tasks":"inbox");

@@ -1,3 +1,4 @@
+import { readTaskSchedule } from "../utils/taskSchedule.js";
 const TASK_PROPERTIES = Object.freeze({
   title: "名前",
   status: "Status",
@@ -33,7 +34,9 @@ function mapTaskPage(page) {
     name: pickPageTitle(page),
     status: page.properties[TASK_PROPERTIES.status]?.select?.name ?? "",
     priority: page.properties[TASK_PROPERTIES.priority]?.select?.name ?? "-",
-    dueDateISO: page.properties[TASK_PROPERTIES.dueDate]?.date?.start ?? null,
+    dueDateISO: page.properties[TASK_PROPERTIES.dueDate]?.date?.end ||
+      page.properties[TASK_PROPERTIES.dueDate]?.date?.start || null,
+    startDateISO: readTaskSchedule(page.properties).start_date,
     sinceDoISO: page.properties[TASK_PROPERTIES.sinceDo]?.date?.start ?? "",
     sinceSomedayISO: page.properties[TASK_PROPERTIES.sinceSomeday]?.date?.start ?? "",
     reminderDateISO: page.properties[TASK_PROPERTIES.reminderDate]?.date?.start ?? null,

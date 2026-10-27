@@ -1,3 +1,4 @@
+import { readTaskSchedule, taskFocusState, dateKey } from "../utils/taskSchedule.js";
 import { notionHeaders } from "./client.js";
 
 const PAGE_SIZE = 100;
@@ -89,9 +90,10 @@ function taskFromPage(page) {
     is_parent:p["Task Level"]?.select?.name==="親タスク"||children.length>0,
     children_count:children.length,
     priority:p.Priority?.select?.name||null,
-    due_date:p["Due Date"]?.date?.start||null,
-    reminder_date:p["Reminder Date"]?.date?.start||null,
-    waiting_since:p["Waiting Since"]?.date?.start||null
+    ...readTaskSchedule(p),
+    blocked_by:(p["次のタスクにより保留中："]?.relation||[]).map(item=>item.id),
+    reminder_date:dateKey(p["Reminder Date"]?.date?.start),
+    waiting_since:dateKey(p["Waiting Since"]?.date?.start)
   };
 }
 
@@ -112,6 +114,23 @@ export async function listMobileTasks(env) {
     ]}
   });
   const items=result.pages.map(taskFromPage);
+  const knownPages=new Map(result.pages.map(page=>[page.id.replaceAll("-", ""),page]));
+  const dependencyIds=[...new Set(items.flatMap(item=>item.blocked_by).filter(id=>!knownPages.has(id.replaceAll("-", ""))))];
+  for(let i=0;i<dependencyIds.length;i+=5){
+    await Promise.all(dependencyIds.slice(i,i+5).map(async id=>{
+      try{const page=await getMobilePage(env,id);
+        if(pageBelongsToDatabase(page,env.TASKS_DB_ID))knownPages.set(id.replaceAll("-", ""),page);
+      }catch(_){ /* Unknown prerequisites stay blocked. */ }
+    }));
+  }
+  const today=new Date(Date.now()+9*3600000).toISOString().slice(0,10);
+  for(const item of items){
+    item.blocked_by=item.blocked_by.filter(id=>{
+      const dependency=knownPages.get(id.replaceAll("-", ""));
+      return !dependency || dependency.properties?.Status?.select?.name!=="Done";
+    });
+    item.focus_state=taskFocusState(item,today);
+  }
   const knownNames=new Map(items.map(item=>[item.id,item.name]));
   const absentParentIds=[...new Set(items.map(item=>item.parent_id).filter(id=>id && !knownNames.has(id)))];
   // Avoid a burst of Notion requests if a large batch is imported.

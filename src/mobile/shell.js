@@ -54,6 +54,12 @@ export const html = `<!doctype html>
    <button data-status-filter="Do">Do</button>
    <button data-status-filter="Waiting">Waiting</button>
   </div>
+  <div class="segmented" role="group" aria-label="表示期間">
+   <button class="selected" data-period-filter="now">今やる</button>
+   <button data-period-filter="week">今後7日</button>
+   <button data-period-filter="all">すべて</button>
+  </div>
+  <p id="task-period-note" class="muted"></p>
   <div id="tasks-list" class="list"></div>
 </section>
 </main>
@@ -114,6 +120,8 @@ select{appearance:auto}
 .modal .create-form input,.modal .create-form select,.modal .create-form textarea{width:100%;min-height:45px;background:rgba(6,18,29,.65);color:#f5fbff}
 .modal .create-form textarea{padding:12px;resize:vertical;min-height:76px;border:1px solid rgba(173,213,232,.21);border-radius:13px;font:inherit;font-size:13px}
 .modal .create-form .field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.date-shortcuts{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.date-shortcut{border:1px solid var(--line);border-radius:9px;background:rgba(110,176,196,.11);color:var(--text);padding:8px;font-size:12px}
 .modal .field-note{font-size:11px;line-height:1.5;color:#9cb7c6;margin:8px 0}
 .modal .create-form label{margin-top:13px}
 .modal .create-form .primary{margin-top:20px}
@@ -170,7 +178,7 @@ export const manifest = JSON.stringify({
   ]
 });
 export const serviceWorker = `
-const CACHE = "notion-flow-shell-v1";
+const CACHE = "notion-flow-shell-v2-period";
 const RESOURCES = ["/mobile","/mobile/client.js","/mobile/styles.css","/mobile/manifest.webmanifest"];
 self.addEventListener("install",event=>event.waitUntil(
  caches.open(CACHE).then(c=>c.addAll(RESOURCES)).then(()=>self.skipWaiting())

@@ -1,7 +1,7 @@
 // Notion Focus — a premium large iOS Scriptable widget.
 // Read only. Status updates belong in the authenticated Notion Flow PWA.
 // Reuses the token already saved by Notion Week; no new API or secret is needed.
-const API_URL = "https://notion-inbox-triage.kazuhiro-mizuide.workers.dev/api/mobile/tasks";
+const API_URL = "https://notion-inbox-triage.kazuhiro-mizuide.workers.dev/api/mobile/tasks?scope=focus";
 const FLOW_URL = "https://notion-inbox-triage.kazuhiro-mizuide.workers.dev/mobile?tab=tasks";
 const TOKEN_KEY = "NOTION_WEEK_WIDGET_SHORTCUT_TOKEN";
 // Six total slots are shared by Do/Waiting: unused Waiting space belongs to Do.
@@ -93,7 +93,8 @@ function normalize(tasks,today) {
   const projects=all.filter(t=>t.is_parent===true||t.task_level==="親タスク");
   const actionable=all.filter(t=>
     t && !t.is_parent && t.task_level!=="親タスク" &&
-    (t.status==="Do" || t.status==="Waiting")
+    (t.status==="Do" || t.status==="Waiting") &&
+    (!t.focus_state || t.focus_state==="now")
   );
   const doItems=actionable.filter(t=>t.status==="Do").sort((a,b)=>{
     return actionBucket(a,today)-actionBucket(b,today) ||
@@ -215,6 +216,7 @@ function addTaskRow(widget,task,index,type,today,dense=false) {
   stamp.layoutVertically();stamp.centerAlignContent();
   stamp.size=new Size(52,0);
   const text=type==="do"?dueText(task,today):waitingText(task,today);
+  if(task.start_date)label(stamp,shortDate(task.start_date)+"〜",8,C.faint,"medium");
   const critical=type==="do" && dateDiff(task.due_date,today)!==null &&
     dateDiff(task.due_date,today)<0;
   label(stamp,text,text.length>=5?8.1:9,critical?C.coral:accent,"semibold");

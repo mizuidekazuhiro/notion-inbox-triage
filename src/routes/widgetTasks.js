@@ -1,3 +1,4 @@
+import { taskFocusState, dateKey } from "../utils/taskSchedule.js";
 import { queryWidgetTasksToday } from "../notion/tasks.js";
 import { jsonResponse } from "../utils/http.js";
 import { DAY_MS, parseJstDateStart, startOfJstDay, getJstDateString } from "../utils/date.js";
@@ -27,6 +28,7 @@ function toWidgetTaskItem(item) {
     name: item.name,
     status: item.status,
     priority: item.priority || "-",
+    start_date: item.startDateISO || null,
     due_date: (() => {
       const dueStart = parseJstDateStart(item.dueDateISO);
       return dueStart ? getJstDateString(dueStart) : null;
@@ -66,7 +68,11 @@ export async function handleWidgetTasksToday(request, env) {
   try {
     const todayStart = startOfJstDay(new Date());
     const items = await queryWidgetTasksToday(env, 100);
-    const filtered = items.filter((item) => item.status === "Do" || (item.status === "Waiting" && isWaitingDue(item, todayStart)));
+    const today=getJstDateString(todayStart);
+    const filtered=items.filter(item=>!item.childTaskIds?.length && item.taskLevel!=="親タスク" &&
+      taskFocusState({status:item.status,start_date:dateKey(item.startDateISO),
+        due_date:dateKey(item.dueDateISO),reminder_date:dateKey(item.reminderDateISO),
+        waiting_since:dateKey(item.waitingSinceISO)},today)==="now");
     const sorted = sortByDueDateAsc(filtered);
     const limited = sorted.slice(0, limit).map(toWidgetTaskItem);
     console.log(JSON.stringify({ event: "widget_tasks_today_request", success: true, limit, count: filtered.length }));

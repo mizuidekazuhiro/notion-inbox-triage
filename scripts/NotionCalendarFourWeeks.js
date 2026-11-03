@@ -66,6 +66,26 @@ function widgetWidth() {
   const w=Math.min(screen.width,screen.height);
   return w<=320?292:w<=375?329:w<=390?338:w<=414?360:364;
 }
+function addDateBadge(cell,key,today,past,width) {
+  // Draw the whole date at a fixed size. A narrow text stack with flexible
+  // spacers can compress "21" to "2" on a real Scriptable widget.
+  const day=Number(key.slice(8,10));
+  const stamp=day===1?Number(key.slice(5,7))+"/1":String(day);
+  const canvas=new DrawContext();
+  canvas.size=new Size(width,20);
+  canvas.opaque=false;
+  canvas.respectScreenScale=true;
+  if(today) {
+    canvas.setFillColor(color(C.cyan));
+    canvas.fillEllipse(new Rect((width-20)/2,0,20,20));
+  }
+  canvas.setFont(Font.semiboldSystemFont(10));
+  canvas.setTextColor(color(today?C.background:past?C.faint:C.white));
+  canvas.setTextAlignedCenter();
+  canvas.drawTextInRect(stamp,new Rect(0,3,width,16));
+  const image=cell.addImage(canvas.getImage());
+  image.imageSize=new Size(width,20);
+}
 function makeWidget(result,state,now=new Date()) {
   const range=rangeFor(now);
   const widget=new ListWidget();
@@ -109,15 +129,7 @@ function makeWidget(result,state,now=new Date()) {
       cell.backgroundColor=color(today?C.cyan:C.surface,today?0.15:past?0.025:0.055);
       cell.borderColor=color(today?C.cyan:C.border,today?0.95:0.17);
       cell.borderWidth=today?1.2:0.5;
-      const dateRow=cell.addStack(); dateRow.centerAlignContent();
-      const badge=dateRow.addStack(); badge.size=new Size(22,19);
-      badge.centerAlignContent(); badge.cornerRadius=9.5;
-      if(today)badge.backgroundColor=color(C.cyan);
-      badge.addSpacer();
-      const day=Number(key.slice(8,10));
-      const stamp=day===1?Number(key.slice(5,7))+"/1":String(day);
-      label(badge,stamp,10,today?C.background:past?C.faint:C.white,true);
-      badge.addSpacer();
+      addDateBadge(cell,key,today,past,cellWidth-4);
       cell.addSpacer(3);
       const events=eventsForDay(result?.items||[],key);
       const visible=events.length>2?events.slice(0,1):events.slice(0,2);
@@ -194,8 +206,10 @@ async function loadCalendar(now=new Date()) {
       message:"予定を取得できません・タップしてNotionへ"}};
   }
 }
-const loaded=await loadCalendar();
-const widget=makeWidget(loaded.result,loaded.state);
+// Use the same date snapshot for loading and drawing across Sunday midnight.
+const snapshot=new Date();
+const loaded=await loadCalendar(snapshot);
+const widget=makeWidget(loaded.result,loaded.state,snapshot);
 if(config.runsInWidget)Script.setWidget(widget);
 else await widget.presentLarge();
 Script.complete();

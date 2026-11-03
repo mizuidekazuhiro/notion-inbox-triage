@@ -13,6 +13,7 @@ const reply={ok:true,timezone:"Asia/Tokyo",from:"2026-10-18",until_exclusive:"20
 class Stack {
   constructor(){this.children=[];this.spacers=[];}
   addText(text){const t={text:String(text)};this.children.push(t);return t;}
+  addImage(image){const element={image};this.children.push(element);return element;}
   addStack(){const s=new Stack();this.children.push(s);return s;}
   addSpacer(n){this.spacers.push(n);}
   layoutHorizontally(){} layoutVertically(){} centerAlignContent(){}
@@ -20,7 +21,7 @@ class Stack {
 }
 async function run({fail=false,status=200,cache=null,width=375,body=reply}={}) {
   let widget,saved=cache?JSON.stringify(cache):null;
-  const all=[];
+  const all=[],drawings=[];
   class Widget extends Stack {constructor(){super();all.push(this);}}
   class Clock extends Date {constructor(x){super(x??NOW);}static now(){return Date.parse(NOW);}}
   const sandbox={Date:Clock,Intl,console,
@@ -33,6 +34,17 @@ async function run({fail=false,status=200,cache=null,width=375,body=reply}={}) {
       async loadJSON(){if(fail)throw Error("offline");return body;}},
     ListWidget:Widget,LinearGradient:class{},Color:class {constructor(hex,alpha){this.hex=hex;this.alpha=alpha;}},
     Size:class {constructor(width,height){this.width=width;this.height=height;}},
+    Rect:class {constructor(x,y,width,height){Object.assign(this,{x,y,width,height});}},
+    DrawContext:class {
+      constructor(){this.ellipses=[];drawings.push(this);}
+      setFillColor(c){this.fillColor=c;}
+      fillEllipse(rect){this.ellipses.push(rect);}
+      setFont(font){this.font=font;}
+      setTextColor(c){this.textColor=c;}
+      setTextAlignedCenter(){this.alignment="center";}
+      drawTextInRect(text,rect){this.text=text;this.textRect=rect;}
+      getImage(){return this;}
+    },
     Font:{systemFont:size=>({size}),semiboldSystemFont:size=>({size,bold:true})},
     Script:{setWidget:w=>{widget=w;},complete(){}}
   };
@@ -40,7 +52,7 @@ async function run({fail=false,status=200,cache=null,width=375,body=reply}={}) {
     ";return {rangeFor,eventsForDay,safeNotionURL};})()");
   const api=await program.runInNewContext(sandbox,{timeout:3000});
   function flatten(s){return [s,...(s.children||[]).flatMap(flatten)];}
-  return {widget,saved,api,all:flatten(widget),texts:flatten(widget).filter(x=>x.text).map(x=>x.text)};
+  return {widget,saved,api,drawings,all:flatten(widget),texts:flatten(widget).filter(x=>x.text).map(x=>x.text)};
 }
 test("renders 28 cells, exactly one highlighted today and inherited palette on SE size",async()=>{
   const r=await run({width:375});
@@ -48,13 +60,33 @@ test("renders 28 cells, exactly one highlighted today and inherited palette on S
   assert.equal(cells.length,28);
   const today=cells.filter(x=>x.borderWidth===1.2);
   assert.equal(today.length,1);
-  assert.equal(today[0].children[0].children[0].backgroundColor.hex,"#8AD7E5");
+  assert.equal(today[0].children[0].image.fillColor.hex,"#8AD7E5");
+  assert.equal(today[0].children[0].image.text,"21");
   assert.ok(r.texts.includes("今日 10/21（水）"));
-  assert.ok(r.texts.includes("11/1"));
+  assert.ok(r.drawings.some(x=>x.text==="11/1"));
   assert.ok(r.texts.includes("＋2件"));
   assert.equal(r.widget.backgroundGradient.colors[0].hex,"#0A1925");
   assert.equal(JSON.parse(r.saved).count,4);
   assert.equal(r.widget.refreshAfterDate.getTime()-Date.parse(NOW),30*60000);
+});
+test("all 28 dates get full-width, uncompressed drawing at every supported phone width",async()=>{
+  for(const width of [320,375,390,414,430]) {
+    const r=await run({width});
+    assert.equal(r.drawings.length,28);
+    const expected=Array.from({length:28},(_,i)=>{
+      const date=new Date(Date.parse("2026-10-18T00:00:00Z")+i*86400000);
+      return date.getUTCDate()===1?"11/1":String(date.getUTCDate());
+    });
+    assert.deepEqual(r.drawings.map(x=>x.text),expected);
+    assert.equal(r.drawings.filter(x=>x.ellipses.length===1).length,1);
+    for(const d of r.drawings) {
+      assert.ok(d.size.width>=31,"room for two digits and month/day");
+      assert.equal(d.textRect.width,d.size.width);
+      assert.equal(d.respectScreenScale,true);
+      assert.equal(d.opaque,false);
+      assert.equal(d.alignment,"center");
+    }
+  }
 });
 test("all-day final date inclusive; midnight timed end exclusive; timed UTC start in JST",async()=>{
   const {api}=await run();

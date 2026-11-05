@@ -3,7 +3,7 @@ export const clientJs = `
 (function(){
 const $ = id => document.getElementById(id);
 const storeKey = "notion_flow_session_token";
-const state = {token:"",loggedIn:false,inbox:[],tasks:[],projects:[],tab:"inbox",filter:"all",period:"now",busy:false,bulkMode:false,selectedTaskIds:new Set(),visibleTaskIds:[]};
+const state = {token:"",loggedIn:false,inbox:[],tasks:[],projects:[],tab:"inbox",filter:"all",period:"now",busy:false,bulkMode:false,selectedTaskIds:new Set(),visibleTaskIds:[],inboxBulkMode:false,selectedInboxIds:new Set()};
 const labels = {Do:"Do · 実行",Waiting:"Waiting · 相手待ち",Done:"Done · 完了",Someday:"Someday · いつか",Thinking:"Thinking · 検討",Drop:"Drop · 取下げ"};
 const MOVE = ["Do","Waiting","Someday","Thinking","Done","Drop"];
 const NEXT = ["Done","Waiting","Do","Someday"];
@@ -62,6 +62,7 @@ function setBusy(value){
  const buttons=document.querySelectorAll(".modal .primary");
  buttons.forEach(b=>b.disabled=value);
  renderBulkControls();
+ renderInboxBulkControls();
 }
 function openDialog(kicker,title,description,build){
  $("modal-kicker").textContent=kicker;
@@ -275,7 +276,7 @@ async function reload(){
    else failures++;
    if(answers[1].status==="fulfilled"){state.tasks=answers[1].value.items||[];}
    else failures++;
-   if(answers[2].status==="fulfilled")state.projects=answers[2].value.items||[];
+   if(answers[2].status==="fulfilled"){state.projects=answers[2].value.items||[];updateInboxBulkProjectOptions();}
    if(!state.loggedIn)return;
    refreshUI();
    const count=answers.filter(a=>a.status==="fulfilled").length;
@@ -306,6 +307,7 @@ async function login(event){
 function localLogout(){
  state.token="";state.loggedIn=false;state.inbox=[];state.tasks=[];state.projects=[];
  state.bulkMode=false;state.selectedTaskIds.clear();state.visibleTaskIds=[];
+ state.inboxBulkMode=false;state.selectedInboxIds.clear();
  try{sessionStorage.removeItem(storeKey);}catch(_){}
  show($("dashboard"),false);show($("auth"),true);show($("lock"),false);
  if(!$("modal").hidden){state.busy=false;closeDialog();}
@@ -327,7 +329,9 @@ function setTab(tab){
  });
  show($("inbox-panel"),tab==="inbox");show($("tasks-panel"),tab==="tasks");
  if(tab!=="tasks"){state.bulkMode=false;state.selectedTaskIds.clear();}
+ if(tab!=="inbox"){state.inboxBulkMode=false;state.selectedInboxIds.clear();}
  renderBulkControls();
+ renderInboxBulkControls();
 }
 function row(title,description,symbol,side,handler){
  const button=node("button","item");button.type="button";
@@ -345,10 +349,130 @@ function row(title,description,symbol,side,handler){
 function renderInbox(){
  const container=$("inbox-list");clear(container);
  $("inbox-caption").textContent=state.inbox.length+"件";
+ const available=new Set(state.inbox.map(item=>item.id));
+ for(const id of state.selectedInboxIds)if(!available.has(id))state.selectedInboxIds.delete(id);
+ renderInboxBulkControls();
  if(!state.inbox.length){container.append(node("div","empty","Inboxは空です。未処理アイテムはありません。"));return;}
  for(const item of state.inbox){
-  container.append(row(item.title,"Inbox → Taskに振り分け","↓",null,()=>openMove(item)));
+  if(!state.inboxBulkMode){
+   container.append(row(item.title,"Inbox → Taskに振り分け","↓",null,()=>openMove(item)));
+   continue;
+  }
+  const wrapper=node("div","bulk-item");
+  const checkbox=node("input","bulk-check");
+  checkbox.type="checkbox";
+  checkbox.checked=state.selectedInboxIds.has(item.id);
+  checkbox.setAttribute("aria-label","選択: "+item.title);
+  checkbox.addEventListener("change",()=>toggleInboxSelection(item.id,checkbox.checked));
+  const itemButton=row(item.title,"Inbox → Taskに振り分け","↓",null,
+   ()=>toggleInboxSelection(item.id,!state.selectedInboxIds.has(item.id)));
+  itemButton.setAttribute("aria-pressed",String(checkbox.checked));
+  wrapper.classList.toggle("picked",checkbox.checked);
+  wrapper.append(checkbox,itemButton);
+  container.append(wrapper);
  }
+}
+function toggleInboxSelection(id,selected){
+ if(state.busy||!state.inboxBulkMode||!state.inbox.some(item=>item.id===id))return;
+ if(selected)state.selectedInboxIds.add(id);else state.selectedInboxIds.delete(id);
+ renderInbox();
+}
+function updateInboxBulkProjectOptions(){
+ const project=$("inbox-bulk-project");
+ if(!project)return;
+ const previous=project.value;
+ clear(project);
+ const blank=node("option",null,"指定なし");blank.value="";project.append(blank);
+ for(const p of state.projects){
+  const option=node("option",null,p.name);option.value=p.id;project.append(option);
+ }
+ project.value=state.projects.some(p=>p.id===previous)?previous:"";
+}
+function renderInboxBulkControls(){
+ const toggle=$("inbox-bulk-toggle");
+ if(!toggle)return;
+ const active=state.inboxBulkMode;
+ toggle.textContent=active?"選択終了":"複数選択";
+ toggle.setAttribute("aria-pressed",String(active));
+ toggle.disabled=state.busy;
+ for(const id of ["inbox-bulk-count","inbox-bulk-select-all","inbox-bulk-clear","inbox-bulk-actions"]){
+  show($(id),active);
+ }
+ $("inbox-bulk-count").textContent=state.selectedInboxIds.size+"件選択";
+ $("inbox-bulk-select-all").disabled=state.busy||!state.inbox.length||
+  state.inbox.every(item=>state.selectedInboxIds.has(item.id));
+ $("inbox-bulk-clear").disabled=state.busy||state.selectedInboxIds.size===0;
+ const to=$("inbox-bulk-target").value||"Do";
+ show($("inbox-bulk-do-fields"),active&&to==="Do");
+ show($("inbox-bulk-waiting-fields"),active&&to==="Waiting");
+ for(const id of ["inbox-bulk-target","inbox-bulk-priority","inbox-bulk-due",
+                  "inbox-bulk-project","inbox-bulk-reminder"]){
+  $(id).disabled=state.busy;
+ }
+ $("inbox-bulk-apply").disabled=state.busy||state.selectedInboxIds.size===0;
+}
+async function applyInboxBulk(){
+ if(state.busy||!state.inboxBulkMode)return;
+ const to=$("inbox-bulk-target").value;
+ if(!MOVE.includes(to)){status("移動先を選択してください");return;}
+ const selected=state.inbox.filter(item=>state.selectedInboxIds.has(item.id));
+ if(!selected.length){status("処理するInboxを選択してください");return;}
+ const options={status:to};
+ if(to==="Do"){
+  const priority=$("inbox-bulk-priority").value;
+  const dueDate=$("inbox-bulk-due").value;
+  const projectId=$("inbox-bulk-project").value;
+  if(priority)options.priority=priority;
+  if(dueDate)options.due_date=dueDate;
+  if(projectId)options.project_id=projectId;
+ }
+ if(to==="Waiting"){
+  const reminder=$("inbox-bulk-reminder").value;
+  if(reminder)options.reminder_date=reminder;
+ }
+ const details=["選択中の "+selected.length+" 件を "+to+" に移動しますか？",
+  "Inbox原文を引き継いでTasksに新規登録し、元のInboxを処理済みにします。"];
+ if(to==="Do"){
+  if(options.priority)details.push("共通優先度: "+options.priority);
+  if(options.due_date)details.push("共通期限: "+options.due_date);
+  if(options.project_id)details.push("共通Projectを指定しています。");
+ }
+ if(to==="Waiting"&&options.reminder_date)details.push("共通再確認日: "+options.reminder_date);
+ details.push("1件でもエラーまたは結果確認不能なら中断します。自動再試行はしません。");
+ if(!window.confirm(details.join(String.fromCharCode(10))))return;
+ let confirmed=0,issue="";
+ setBusy(true);
+ try{
+  for(let i=0;i<selected.length;i++){
+   const item=selected[i];
+   status("Inbox一括移動 "+(i+1)+"/"+selected.length+" 件: "+item.title);
+   try{
+    const result=await api("/api/mobile/inbox/move","POST",{
+     inbox_page_id:item.id,...options
+    });
+    if(result.verified!==true||!result.created_task_id){
+     issue="移動後の結果を確認できません。タスクが作成されている可能性があるため、Notionを確認し、再実行しないでください。";
+     break;
+    }
+    confirmed++;
+   }catch(error){
+    issue="途中停止: "+error.message+"。タスク作成済みの可能性があるため、Notionを確認してから再処理してください。";
+    break;
+   }
+  }
+ }finally{
+  // Never retain selected IDs after success or a partial failure.
+  state.inboxBulkMode=false;
+  state.selectedInboxIds.clear();
+  setBusy(false);
+ }
+ let refreshIssue="";
+ if(state.loggedIn){
+  try{await reload();}
+  catch(error){refreshIssue="一覧の更新に失敗しました: "+error.message;}
+ }
+ status("Inbox一括移動: "+confirmed+"/"+selected.length+" 件の完了を確認。"+
+   (issue?" "+issue:"")+(refreshIssue?" "+refreshIssue:""));
 }
 function openMove(item){
  openDialog("INBOX → TASK",item.title,"移動先のステータスを選択してください。原文の本文も既存処理で引き継ぎます。",body=>{
@@ -597,6 +721,24 @@ $("login-form").addEventListener("submit",login);
 $("lock").addEventListener("click",()=>{if(window.confirm("この端末の接続を解除しますか？"))logout();});
 $("refresh").addEventListener("click",()=>reload().catch(e=>status(e.message)));
 $("new-task").addEventListener("click",()=>openCreateTask().catch(e=>status(e.message)));
+$("inbox-bulk-toggle").addEventListener("click",()=>{
+ if(state.busy)return;
+ state.inboxBulkMode=!state.inboxBulkMode;
+ state.selectedInboxIds.clear();
+ renderInbox();
+});
+$("inbox-bulk-select-all").addEventListener("click",()=>{
+ if(state.busy||!state.inboxBulkMode)return;
+ for(const item of state.inbox)state.selectedInboxIds.add(item.id);
+ renderInbox();
+});
+$("inbox-bulk-clear").addEventListener("click",()=>{
+ if(state.busy)return;
+ state.selectedInboxIds.clear();
+ renderInbox();
+});
+$("inbox-bulk-target").addEventListener("change",renderInboxBulkControls);
+$("inbox-bulk-apply").addEventListener("click",()=>applyInboxBulk().catch(error=>status(error.message)));
 $("bulk-toggle").addEventListener("click",()=>{
  if(state.busy)return;
  state.bulkMode=!state.bulkMode;state.selectedTaskIds.clear();renderTasks();

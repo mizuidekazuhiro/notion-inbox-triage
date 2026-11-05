@@ -11,7 +11,7 @@ export const html = `<!doctype html>
 <link rel="manifest" href="/mobile/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/mobile/icon.png?size=180">
 <link rel="icon" href="/mobile/icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/mobile/styles.css">
+<link rel="stylesheet" href="/mobile/styles.css?v=20261105-block-fix">
 <title>Notion Flow</title>
 </head>
 <body>
@@ -124,7 +124,7 @@ export const html = `<!doctype html>
  </section>
 </div>
 
-<script defer src="/mobile/client.js"></script>
+<script defer src="/mobile/client.js?v=20261105-block-fix"></script>
 </body>
 </html>`;
 
@@ -248,7 +248,7 @@ export const manifest = JSON.stringify({
   ]
 });
 export const serviceWorker = `
-const CACHE = "notion-flow-shell-v4-inbox-bulk";
+const CACHE = "notion-flow-shell-v5-list-copy";
 const RESOURCES = ["/mobile","/mobile/client.js","/mobile/styles.css","/mobile/manifest.webmanifest"];
 self.addEventListener("install",event=>event.waitUntil(
  caches.open(CACHE).then(c=>c.addAll(RESOURCES)).then(()=>self.skipWaiting())
@@ -260,9 +260,9 @@ self.addEventListener("fetch",event=>{
  const url=new URL(event.request.url);
  if(event.request.method!=="GET"||url.origin!==self.location.origin) return;
  if(!RESOURCES.includes(url.pathname)) return;
- event.respondWith(fetch(event.request).then(response=>{
+ event.respondWith(fetch(new Request(event.request,{cache:"no-store"})).then(response=>{
   if(response.ok){const copy=response.clone();event.waitUntil(caches.open(CACHE).then(c=>c.put(event.request,copy)));}
   return response;
- }).catch(()=>caches.match(event.request)));
+ }).catch(()=>caches.match(event.request).then(cached=>cached||caches.match(url.pathname))));
 });
 `;

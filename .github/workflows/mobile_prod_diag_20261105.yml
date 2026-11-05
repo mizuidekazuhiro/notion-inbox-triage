@@ -14,6 +14,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright Core (system Chrome)
+        run: npm install --no-save --ignore-scripts playwright-core@1.56.1
+      - name: Exercise live mobile UI with synthetic API responses
+        run: |
+          export CHROME_PATH="$(command -v google-chrome || command -v chromium || command -v chromium-browser)"
+          echo "Chrome executable: $CHROME_PATH"
+          node scripts/diagnostics/mobile_browser_smoke.mjs
       - name: Check live worker assets without secrets
         shell: bash
         run: |

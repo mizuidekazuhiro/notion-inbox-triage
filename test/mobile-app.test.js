@@ -35,6 +35,15 @@ test("PWA shell and client JavaScript parse and serve with restrictive CSP",asyn
  assert.equal(JSON.parse(manifest).display,"standalone");
  assert.ok(serviceWorker.includes('"/mobile/client.js"'));
  assert.ok(!serviceWorker.includes('"/api/mobile/inbox"'));
+ assert.ok(html.includes('href="/mobile/styles.css?v=20261105-block-fix"'));
+ assert.ok(html.includes('src="/mobile/client.js?v=20261105-block-fix"'));
+ assert.ok(serviceWorker.includes('cache:"no-store"'));
+ const js=await handleMobileAsset(req("/mobile/client.js?v=20261105-block-fix"));
+ assert.equal(js.status,200);
+ assert.equal(js.headers.get("Cache-Control"),"no-store");
+ const styles=await handleMobileAsset(req("/mobile/styles.css?v=20261105-block-fix"));
+ assert.equal(styles.status,200);
+ assert.equal(styles.headers.get("Cache-Control"),"no-store");
  const result=await handleMobileAsset(req("/mobile"));
  assert.equal(result.status,200);
  assert.match(result.headers.get("Content-Security-Policy"),/connect-src 'self'/);

@@ -107,7 +107,7 @@ export async function handleMobileAsset(request) {
  const response=new Response(request.method==="HEAD"?null:content,{
   headers:{
    "Content-Type":MIME[path]||"text/plain; charset=UTF-8",
-   "Cache-Control":path==="/mobile"||path==="/mobile/"?"no-store":"public,max-age=300",
+   "Cache-Control":path==="/mobile/icon.png"||path==="/mobile/icon.svg"?"public,max-age=300":"no-store",
    "X-Content-Type-Options":"nosniff",
    "Referrer-Policy":"no-referrer",
    "Strict-Transport-Security":"max-age=31536000",

@@ -49,9 +49,14 @@ async function api(path,method,payload){
    if(path!=="/api/mobile/session/start")localLogout();
    throw new Error("認証キーを確認してください");
   }
-  if(response.status===409)throw new Error("他の端末で更新されています。一覧を更新してください");
+  if(response.status===409)throw new Error(data.error==="already_processed"?
+    "すでに処理済みのInboxです。画面を更新して確認してください":
+    "他の端末で更新されています。一覧を更新してください");
   if(response.status===400)throw new Error("入力内容を確認してください");
-  throw new Error(data.error==="notion_unavailable"?"Notionに接続できません":"処理できませんでした（HTTP "+response.status+"）");
+  throw new Error(data.error==="move_failed"?
+    "Inboxの移動に失敗しました。Notionの元ページにあるError Messageを確認してください":
+    data.error==="notion_unavailable"?"Notionに接続できません":
+    "処理できませんでした（HTTP "+response.status+"）");
  }
  return data;
 }
@@ -457,12 +462,12 @@ async function applyInboxBulk(){
      inbox_page_id:item.id,...options
     });
     if(result.verified!==true||!result.created_task_id){
-     issue="移動後の結果を確認できません。タスクが作成されている可能性があるため、Notionを確認し、再実行しないでください。";
+     issue="「"+item.title+"」の移動後の結果を確認できません。タスクが作成されている可能性があるため、Notionを確認し、再実行しないでください。";
      break;
     }
     confirmed++;
    }catch(error){
-    issue="途中停止: "+error.message+"。タスク作成済みの可能性があるため、Notionを確認してから再処理してください。";
+    issue="「"+item.title+"」で途中停止: "+error.message+"。タスク作成済みの可能性があるため、Notionを確認してから再処理してください。";
     break;
    }
   }

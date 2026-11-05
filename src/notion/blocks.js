@@ -12,6 +12,11 @@ const READ_ONLY_BLOCK_FIELDS = new Set([
   "in_trash"
 ]);
 
+// Notion's read responses can include list_format/list_start_index (read-only metadata).
+// For list item writes, accept only fields documented for creating/appending a block.
+const LIST_ITEM_TYPES = new Set(["bulleted_list_item", "numbered_list_item"]);
+const WRITABLE_LIST_FIELDS = new Set(["rich_text", "color"]);
+
 const UNSUPPORTED_BLOCK_TYPES = new Set([
   "child_page",
   "child_database",
@@ -86,7 +91,7 @@ export async function cloneWritableBlockTree(env, sourceBlock) {
     return { writableBlock: null, skippedType: blockType };
   }
 
-  const typePayload = sanitizeTypePayload(sourceBlock[blockType]);
+  const typePayload = sanitizeTypePayload(sourceBlock[blockType], blockType);
   const writableBlock = {
     type: blockType,
     [blockType]: typePayload
@@ -98,7 +103,7 @@ export async function cloneWritableBlockTree(env, sourceBlock) {
       .filter((row) => row?.type === "table_row")
       .map((row) => ({
         type: "table_row",
-        table_row: sanitizeTypePayload(row.table_row)
+        table_row: sanitizeTypePayload(row.table_row, "table_row")
       }));
   }
 
@@ -229,11 +234,15 @@ async function copyBlockLevel({ env, sourceBlocks, targetParentId, summary, skip
   }
 }
 
-export function sanitizeTypePayload(typePayload) {
+export function sanitizeTypePayload(typePayload, blockType = null) {
   if (!typePayload || typeof typePayload !== "object") return {};
   const cloned = JSON.parse(JSON.stringify(typePayload));
 
   for (const key of Object.keys(cloned)) {
+    if (LIST_ITEM_TYPES.has(blockType) && !WRITABLE_LIST_FIELDS.has(key)) {
+      delete cloned[key];
+      continue;
+    }
     if (READ_ONLY_BLOCK_FIELDS.has(key)) {
       delete cloned[key];
       continue;

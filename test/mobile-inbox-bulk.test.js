@@ -176,11 +176,16 @@ test("cancelled confirmation performs no mutation",async()=>{
  assert.equal(app.el("inbox-bulk-count").textContent,"3件選択");
 });
 
-test("switching away from Inbox resets its bulk selection",async()=>{
+test("switching away from Inbox restores normal item buttons as well as clearing selection",async()=>{
  const app=await ready();
  await app.el("inbox-bulk-toggle").trigger("click");
  await app.el("inbox-bulk-select-all").trigger("click");
+ assert.equal(app.el("inbox-list").children[0].children.length,2,"bulk row has checkbox and button");
  await app.tabs[1].trigger("click");
  assert.equal(app.el("inbox-bulk-count").textContent,"0件選択");
  assert.equal(app.el("inbox-bulk-actions").hidden,true);
+ assert.equal(app.el("inbox-list").children[0].children.length,3,"normal single-item button restored");
+ await app.tabs[0].trigger("click");
+ await app.el("inbox-list").children[0].trigger("click");
+ assert.equal(app.el("modal").hidden,false,"individual Inbox action must still open");
 });

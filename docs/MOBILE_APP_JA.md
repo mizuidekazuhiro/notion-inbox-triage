@@ -7,6 +7,10 @@
 
 ## 画面仕様
 - **Inbox**：未処理アイテムの一覧。各行をタップ→移動先を Do / Waiting / Someday / Thinking / Done / Drop から選択。
+  - **Inbox一括処理**：Inboxタブの「複数選択」から任意の未処理アイテムをチェック（「表示中を全選択」・「選択解除」に対応）。共通の移動先を Do / Waiting / Someday / Thinking / Done / Drop から選択して、確認ダイアログ後にまとめて処理します。
+  - Doへの移動では優先度・期限・Project、Waitingでは再確認日を複数アイテムに共通指定できます。指定しない項目は従来の個別移動と同じ処理に委ねます。Inboxの各件の原文や既存のプロパティは既存の移動処理でTaskへ引き継ぎます。
+  - **安全策**：既存の認証付き `POST /api/mobile/inbox/move` を1件ずつ実行します。新しいAPIやDB項目は不要。NotionのProcessed Atを再取得して最終確認できた件数だけ成功表示し、409・通信失敗・最終確認不能時は後続を停止し自動再試行しません。変更済みか不明な件は必ずNotionで確認してください。画面切り替え・処理完了時は選択を解除します。
+
   - Do：優先度・期限・Project を設定可能。
   - Waiting：再確認日（Reminder Date）を設定可能。
   - 旧 `/action/move` のプロパティ転記・原文複製・Undo登録を再利用。

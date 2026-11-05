@@ -45,6 +45,37 @@ export const html = `<!doctype html>
 </nav>
 <section id="inbox-panel" class="panel" aria-labelledby="tab-inbox">
   <div class="section-heading"><div><p class="eyebrow">CAPTURE</p><h3>未処理のInbox</h3></div><span id="inbox-caption" class="muted">読み込み中</span></div>
+  <div id="inbox-bulk-toolbar" class="bulk-toolbar" role="group" aria-label="Inbox一括処理">
+   <button id="inbox-bulk-toggle" class="bulk-toggle" type="button" aria-pressed="false">複数選択</button>
+   <span id="inbox-bulk-count" class="muted" hidden>0件選択</span>
+   <button id="inbox-bulk-select-all" class="bulk-control" type="button" hidden>表示中を全選択</button>
+   <button id="inbox-bulk-clear" class="bulk-control" type="button" hidden>選択解除</button>
+  </div>
+  <div id="inbox-bulk-actions" class="inbox-bulk-actions" hidden>
+   <div class="inbox-bulk-target-row">
+    <label for="inbox-bulk-target">一括移動先</label>
+    <select id="inbox-bulk-target">
+     <option value="Do">Do · 実行</option>
+     <option value="Waiting">Waiting · 相手待ち</option>
+     <option value="Someday">Someday · いつか</option>
+     <option value="Thinking">Thinking · 検討</option>
+     <option value="Done">Done · 完了</option>
+     <option value="Drop">Drop · 取下げ</option>
+    </select>
+   </div>
+   <div id="inbox-bulk-do-fields" class="inbox-bulk-fields">
+    <div><label for="inbox-bulk-priority">優先度（共通・任意）</label>
+     <select id="inbox-bulk-priority"><option value="">指定なし</option><option value="High">High</option><option value="Mid">Mid</option><option value="Low">Low</option></select></div>
+    <div><label for="inbox-bulk-due">期限（共通・任意）</label><input type="date" id="inbox-bulk-due"></div>
+    <div class="inbox-bulk-project"><label for="inbox-bulk-project">Project（共通・任意）</label>
+     <select id="inbox-bulk-project"><option value="">指定なし</option></select></div>
+   </div>
+   <div id="inbox-bulk-waiting-fields" class="inbox-bulk-fields" hidden>
+    <div><label for="inbox-bulk-reminder">再確認日（共通・任意）</label><input type="date" id="inbox-bulk-reminder"></div>
+   </div>
+   <button id="inbox-bulk-apply" class="primary" type="button" disabled>選択したInboxを一括処理</button>
+   <p class="muted">原文はTasksへ引き継ぎます。失敗時は停止し、自動再試行しません。</p>
+  </div>
   <div id="inbox-list" class="list"></div>
 </section>
 <section id="tasks-panel" class="panel" aria-labelledby="tab-tasks" hidden>
@@ -169,6 +200,16 @@ select{appearance:auto}
 .bulk-actions label{margin:0;white-space:nowrap;font-size:11px}
 .bulk-actions select{min-height:42px;min-width:0;flex:1;padding:7px;font-size:12px}
 .bulk-actions .primary{width:auto;min-height:42px;margin:0;padding:8px 12px;white-space:normal;text-align:center;font-size:12px}
+.inbox-bulk-actions{border:1px solid rgba(135,219,228,.33);background:rgba(45,108,125,.14);border-radius:14px;margin:0 0 14px;padding:14px}
+.inbox-bulk-actions label{margin:0 0 6px}
+.inbox-bulk-target-row{display:flex;gap:10px;align-items:center}
+.inbox-bulk-target-row label{white-space:nowrap;margin:0}
+.inbox-bulk-target-row select{min-width:0;flex:1}
+.inbox-bulk-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
+.inbox-bulk-fields .inbox-bulk-project{grid-column:1/-1}
+.inbox-bulk-fields input,.inbox-bulk-fields select{width:100%}
+.inbox-bulk-actions .primary{margin-top:14px}
+.inbox-bulk-actions .muted{margin:10px 2px 0}
 .bulk-item{display:flex;align-items:center;gap:8px;border-radius:18px}
 .bulk-item .bulk-check{min-height:23px;width:23px;height:23px;flex:0 0 23px;margin:0 0 0 8px;accent-color:#81dded;cursor:pointer}
 .bulk-item .item{min-width:0;flex:1;width:auto}
@@ -207,7 +248,7 @@ export const manifest = JSON.stringify({
   ]
 });
 export const serviceWorker = `
-const CACHE = "notion-flow-shell-v3-bulk";
+const CACHE = "notion-flow-shell-v4-inbox-bulk";
 const RESOURCES = ["/mobile","/mobile/client.js","/mobile/styles.css","/mobile/manifest.webmanifest"];
 self.addEventListener("install",event=>event.waitUntil(
  caches.open(CACHE).then(c=>c.addAll(RESOURCES)).then(()=>self.skipWaiting())

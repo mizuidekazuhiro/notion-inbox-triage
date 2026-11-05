@@ -1,0 +1,50 @@
+name: Mobile Public Production Diagnostic
+
+on:
+  push:
+    branches:
+      - diag/mobile-prod-smoke-20261105
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-live-mobile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check live worker assets without secrets
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { createHash } from "node:crypto";
+          const base = "https://notion-inbox-triage.kazuhiro-mizuide.workers.dev";
+          const cases = [
+            ["/mobile?tab=inbox", ["id=\"inbox-bulk-toggle\"", "id=\"bulk-toggle\""]],
+            ["/mobile/client.js", ["function applyInboxBulk()", "renderInboxBulkControls()", "state.inboxBulkMode"]],
+            ["/mobile/styles.css", [".inbox-bulk-actions"]],
+            ["/mobile/sw.js", ["notion-flow-shell-v4-inbox-bulk"]]
+          ];
+          let fails = 0;
+          for (const [path, markers] of cases) {
+            try {
+              const response = await fetch(base+path, { signal: AbortSignal.timeout(12000), headers: {"Cache-Control":"no-cache"} });
+              const body = await response.text();
+              const digest = createHash("sha256").update(body).digest("hex").slice(0,16);
+              const found = markers.map(marker=>[marker,body.includes(marker)]);
+              console.log(JSON.stringify({path,status:response.status,type:response.headers.get("content-type"),size:body.length,sha256:digest,markers:found}));
+              if (!response.ok || found.some(([,ok])=>!ok)) fails++;
+            } catch(e) {
+              console.log(JSON.stringify({path,error:e.message}));
+              fails++;
+            }
+          }
+          const check = await fetch(base+"/api/mobile/inbox", {signal:AbortSignal.timeout(12000)});
+          console.log(JSON.stringify({path:"/api/mobile/inbox",unauthenticatedStatus:check.status}));
+          if (![401,503].includes(check.status)) fails++;
+          if (fails) {
+            console.error("Production smoke diagnostics reported "+fails+" mismatches.");
+            process.exitCode=1;
+          }
+          NODE

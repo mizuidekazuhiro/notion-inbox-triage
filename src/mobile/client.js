@@ -329,7 +329,13 @@ function setTab(tab){
  });
  show($("inbox-panel"),tab==="inbox");show($("tasks-panel"),tab==="tasks");
  if(tab!=="tasks"){state.bulkMode=false;state.selectedTaskIds.clear();}
- if(tab!=="inbox"){state.inboxBulkMode=false;state.selectedInboxIds.clear();}
+ if(tab!=="inbox"){
+  const wasBulk=state.inboxBulkMode;
+  state.inboxBulkMode=false;
+  state.selectedInboxIds.clear();
+  // Restore normal row click handlers when leaving bulk mode via tab switch.
+  if(wasBulk)renderInbox();
+ }
  renderBulkControls();
  renderInboxBulkControls();
 }

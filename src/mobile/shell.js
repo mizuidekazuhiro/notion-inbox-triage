@@ -60,6 +60,22 @@ export const html = `<!doctype html>
    <button data-period-filter="all">すべて</button>
   </div>
   <p id="task-period-note" class="muted"></p>
+  <div id="bulk-toolbar" class="bulk-toolbar" role="group" aria-label="タスク一括操作">
+   <button id="bulk-toggle" class="bulk-toggle" type="button" aria-pressed="false">複数選択</button>
+   <span id="bulk-count" class="muted" hidden>0件選択</span>
+   <button id="bulk-select-visible" class="bulk-control" type="button" hidden>表示中を全選択</button>
+   <button id="bulk-clear" class="bulk-control" type="button" hidden>選択解除</button>
+  </div>
+  <div id="bulk-actions" class="bulk-actions" hidden>
+   <label for="bulk-target">一括変更先</label>
+   <select id="bulk-target">
+    <option value="Done">Done · 完了</option>
+    <option value="Waiting">Waiting · 相手待ち</option>
+    <option value="Do">Do · 実行</option>
+    <option value="Someday">Someday · いつか</option>
+   </select>
+   <button id="bulk-apply" class="primary" type="button" disabled>選択したタスクを変更</button>
+  </div>
   <div id="tasks-list" class="list"></div>
 </section>
 </main>
@@ -145,6 +161,19 @@ select{appearance:auto}
 .segmented{display:flex;gap:6px;background:rgba(4,15,24,.4);border-radius:14px;padding:4px;margin:0 0 18px;border:1px solid var(--line)}
 .segmented button{flex:1;border:0;border-radius:10px;background:transparent;color:#9db7c7;min-height:41px;font-weight:700;font-size:12px}
 .segmented button.selected{background:rgba(121,206,222,.22);color:#eaf9ff}
+.bulk-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0 14px}
+.bulk-toggle,.bulk-control{min-height:38px;background:rgba(120,185,206,.11);border:1px solid var(--line);border-radius:11px;color:#e0f4fc;padding:7px 10px;font-size:12px;font-weight:700}
+.bulk-toggle[aria-pressed="true"]{background:rgba(121,206,222,.23);border-color:rgba(153,231,245,.5)}
+.bulk-toolbar .muted{margin-right:auto}
+.bulk-actions{display:flex;gap:8px;align-items:center;padding:11px;border:1px solid rgba(135,219,228,.33);background:rgba(45,108,125,.14);border-radius:14px;margin-bottom:14px}
+.bulk-actions label{margin:0;white-space:nowrap;font-size:11px}
+.bulk-actions select{min-height:42px;min-width:0;flex:1;padding:7px;font-size:12px}
+.bulk-actions .primary{width:auto;min-height:42px;margin:0;padding:8px 12px;white-space:normal;text-align:center;font-size:12px}
+.bulk-item{display:flex;align-items:center;gap:8px;border-radius:18px}
+.bulk-item .bulk-check{min-height:23px;width:23px;height:23px;flex:0 0 23px;margin:0 0 0 8px;accent-color:#81dded;cursor:pointer}
+.bulk-item .item{min-width:0;flex:1;width:auto}
+.bulk-item.picked .item{border-color:rgba(126,221,237,.65);background:rgba(38,100,118,.32)}
+@media(max-width:430px){.bulk-actions{flex-wrap:wrap}.bulk-actions label{width:100%}.bulk-actions select{flex-basis:42%}}
 .group-title{font-size:11px;font-weight:750;letter-spacing:.07em;color:#b6d9e5;margin:24px 3px 10px}
 .group-caption{color:#93adbd;font-weight:500;letter-spacing:normal;margin-left:7px}
 details.management{border-top:1px solid var(--line);margin-top:19px;padding-top:15px}
@@ -178,7 +207,7 @@ export const manifest = JSON.stringify({
   ]
 });
 export const serviceWorker = `
-const CACHE = "notion-flow-shell-v2-period";
+const CACHE = "notion-flow-shell-v3-bulk";
 const RESOURCES = ["/mobile","/mobile/client.js","/mobile/styles.css","/mobile/manifest.webmanifest"];
 self.addEventListener("install",event=>event.waitUntil(
  caches.open(CACHE).then(c=>c.addAll(RESOURCES)).then(()=>self.skipWaiting())

@@ -3,7 +3,7 @@ export const clientJs = `
 (function(){
 const $ = id => document.getElementById(id);
 const storeKey = "notion_flow_session_token";
-const state = {token:"",loggedIn:false,inbox:[],tasks:[],projects:[],tab:"inbox",filter:"all",period:"now",busy:false};
+const state = {token:"",loggedIn:false,inbox:[],tasks:[],projects:[],tab:"inbox",filter:"all",period:"now",busy:false,bulkMode:false,selectedTaskIds:new Set(),visibleTaskIds:[]};
 const labels = {Do:"Do · 実行",Waiting:"Waiting · 相手待ち",Done:"Done · 完了",Someday:"Someday · いつか",Thinking:"Thinking · 検討",Drop:"Drop · 取下げ"};
 const MOVE = ["Do","Waiting","Someday","Thinking","Done","Drop"];
 const NEXT = ["Done","Waiting","Do","Someday"];
@@ -61,6 +61,7 @@ function setBusy(value){
  $("new-task").disabled=value;
  const buttons=document.querySelectorAll(".modal .primary");
  buttons.forEach(b=>b.disabled=value);
+ renderBulkControls();
 }
 function openDialog(kicker,title,description,build){
  $("modal-kicker").textContent=kicker;
@@ -304,6 +305,7 @@ async function login(event){
 }
 function localLogout(){
  state.token="";state.loggedIn=false;state.inbox=[];state.tasks=[];state.projects=[];
+ state.bulkMode=false;state.selectedTaskIds.clear();state.visibleTaskIds=[];
  try{sessionStorage.removeItem(storeKey);}catch(_){}
  show($("dashboard"),false);show($("auth"),true);show($("lock"),false);
  if(!$("modal").hidden){state.busy=false;closeDialog();}
@@ -324,6 +326,8 @@ function setTab(tab){
   if(selected)b.setAttribute("aria-current","page");else b.removeAttribute("aria-current");
  });
  show($("inbox-panel"),tab==="inbox");show($("tasks-panel"),tab==="tasks");
+ if(tab!=="tasks"){state.bulkMode=false;state.selectedTaskIds.clear();}
+ renderBulkControls();
 }
 function row(title,description,symbol,side,handler){
  const button=node("button","item");button.type="button";
@@ -402,7 +406,91 @@ function formatTaskMeta(t){
  return fragments.join(" · ");
 }
 function taskRow(t){
- return row(t.name,formatTaskMeta(t),t.is_parent?"▣":t.parent_id?"↳":"✓",t.status,()=>openTask(t));
+ const makeRow=handler=>row(t.name,formatTaskMeta(t),t.is_parent?"▣":t.parent_id?"↳":"✓",t.status,handler);
+ // Parent tasks represent a whole project; exclude them from bulk changes.
+ if(!state.bulkMode||t.is_parent)return makeRow(()=>openTask(t));
+ const container=node("div","bulk-item");
+ const checkbox=node("input","bulk-check");
+ checkbox.type="checkbox";
+ checkbox.checked=state.selectedTaskIds.has(t.id);
+ checkbox.setAttribute("aria-label","選択: "+t.name);
+ checkbox.addEventListener("change",()=>toggleTaskSelection(t.id,checkbox.checked));
+ const taskButton=makeRow(()=>toggleTaskSelection(t.id,!state.selectedTaskIds.has(t.id)));
+ taskButton.setAttribute("aria-pressed",String(checkbox.checked));
+ container.classList.toggle("picked",checkbox.checked);
+ container.append(checkbox,taskButton);
+ return container;
+}
+function toggleTaskSelection(id,selected){
+ if(state.busy||!state.bulkMode||!state.visibleTaskIds.includes(id))return;
+ if(selected)state.selectedTaskIds.add(id);else state.selectedTaskIds.delete(id);
+ renderTasks();
+}
+function renderBulkControls(){
+ const active=state.bulkMode;
+ const toggle=$("bulk-toggle");
+ if(!toggle)return;
+ toggle.textContent=active?"選択終了":"複数選択";
+ toggle.setAttribute("aria-pressed",String(active));
+ toggle.disabled=state.busy;
+ for(const id of ["bulk-count","bulk-select-visible","bulk-clear","bulk-actions"])show($(id),active);
+ $("bulk-count").textContent=state.selectedTaskIds.size+"件選択";
+ $("bulk-select-visible").disabled=state.busy||!state.visibleTaskIds.length||
+   state.visibleTaskIds.every(id=>state.selectedTaskIds.has(id));
+ $("bulk-clear").disabled=state.busy||state.selectedTaskIds.size===0;
+ $("bulk-target").disabled=state.busy;
+ $("bulk-apply").disabled=state.busy||state.selectedTaskIds.size===0;
+}
+async function applyBulkStatus(){
+ if(state.busy||!state.bulkMode)return;
+ const to=$("bulk-target").value;
+ if(!NEXT.includes(to))return;
+ const visible=new Set(state.visibleTaskIds);
+ const selected=state.tasks.filter(t=>visible.has(t.id)&&state.selectedTaskIds.has(t.id)&&
+   !t.is_parent&&(t.status==="Do"||t.status==="Waiting"));
+ const pending=selected.filter(t=>t.status!==to);
+ if(!pending.length){status("選択したタスクは既に "+to+" です");return;}
+ const skipped=selected.length-pending.length;
+ const message=[
+   pending.length+"件のタスクを "+to+" に変更しますか？",
+   skipped?"既に "+to+" の "+skipped+"件は変更しません。":"",
+   "親タスクは対象外です。",
+   "更新は1件ずつ行います。失敗した場合、一部のみ変更済みとなることがあります。"
+ ].filter(Boolean).join(String.fromCharCode(10));
+ if(!window.confirm(message))return;
+ let confirmed=0,issue="";
+ setBusy(true);
+ try{
+  for(let i=0;i<pending.length;i++){
+   const item=pending[i];
+   status("一括処理 "+(i+1)+"/"+pending.length+"件: "+item.name);
+   try{
+    const result=await api("/api/mobile/task/status","POST",{
+     task_id:item.id,expected_status:item.status,to
+    });
+    if(result.verified!==true){
+     issue="確認不能な更新があるため処理を停止しました。Notionで状態を確認してください。";
+     break;
+    }
+    confirmed++;
+   }catch(error){
+    issue="途中停止: "+error.message+"。変更済みの可能性があるため、Notionを確認してから再処理してください。";
+    break;
+   }
+  }
+ }finally{
+  // Clear the selection to prevent accidental resubmission after a partial failure.
+  state.bulkMode=false;
+  state.selectedTaskIds.clear();
+  setBusy(false);
+ }
+ let refreshIssue="";
+ if(state.loggedIn){
+  try{await reload();}
+  catch(error){refreshIssue="一覧更新に失敗しました: "+error.message;}
+ }
+ status("一括変更: "+confirmed+"/"+pending.length+"件の完了を確認。"+
+   (issue?" "+issue:"")+(refreshIssue?" "+refreshIssue:""));
 }
 function group(parent,name,subtitle,items){
  if(!items.length)return;
@@ -424,6 +512,10 @@ function renderTasks(){
    const next=t.status==="Waiting"?(t.reminder_date||t.start_date):(t.start_date||t.due_date);
    return Boolean(next&&next<=weekEnd);
  });
+ state.visibleTaskIds=filtered.filter(t=>!t.is_parent).map(t=>t.id);
+ const visible=new Set(state.visibleTaskIds);
+ for(const id of state.selectedTaskIds)if(!visible.has(id))state.selectedTaskIds.delete(id);
+ renderBulkControls();
  const count=kind=>all.filter(t=>!t.is_parent&&t.focus_state===kind).length;
  $("task-period-note").textContent="先の予定 "+count("upcoming")+"件 · 日付未設定 "+count("unscheduled")+"件 · 前工程待ち "+count("blocked")+"件（「すべて」で確認）";
  if(!filtered.length){root.append(node("div","empty","この表示に該当するタスクはありません。「すべて」で先の予定・日付未設定も確認できます。"));return;}
@@ -505,16 +597,32 @@ $("login-form").addEventListener("submit",login);
 $("lock").addEventListener("click",()=>{if(window.confirm("この端末の接続を解除しますか？"))logout();});
 $("refresh").addEventListener("click",()=>reload().catch(e=>status(e.message)));
 $("new-task").addEventListener("click",()=>openCreateTask().catch(e=>status(e.message)));
+$("bulk-toggle").addEventListener("click",()=>{
+ if(state.busy)return;
+ state.bulkMode=!state.bulkMode;state.selectedTaskIds.clear();renderTasks();
+});
+$("bulk-select-visible").addEventListener("click",()=>{
+ if(state.busy)return;
+ for(const id of state.visibleTaskIds)state.selectedTaskIds.add(id);
+ renderTasks();
+});
+$("bulk-clear").addEventListener("click",()=>{
+ if(state.busy)return;
+ state.selectedTaskIds.clear();renderTasks();
+});
+$("bulk-apply").addEventListener("click",()=>applyBulkStatus().catch(e=>status(e.message)));
 $("modal-close").addEventListener("click",closeDialog);
 document.querySelector(".modal-scrim").addEventListener("click",closeDialog);
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeDialog();});
-document.querySelectorAll("[data-tab]").forEach(button=>button.addEventListener("click",()=>setTab(button.dataset.tab)));
+document.querySelectorAll("[data-tab]").forEach(button=>button.addEventListener("click",()=>{if(!state.busy)setTab(button.dataset.tab);}));
 document.querySelectorAll("[data-status-filter]").forEach(button=>button.addEventListener("click",()=>{
-  state.filter=button.dataset.statusFilter;
+  if(state.busy)return;
+ state.filter=button.dataset.statusFilter;
   document.querySelectorAll("[data-status-filter]").forEach(other=>other.classList.toggle("selected",other===button));
   renderTasks();
 }));
 document.querySelectorAll("[data-period-filter]").forEach(button=>button.addEventListener("click",()=>{
+ if(state.busy)return;
  state.period=button.dataset.periodFilter;
  document.querySelectorAll("[data-period-filter]").forEach(other=>other.classList.toggle("selected",other===button));
  renderTasks();

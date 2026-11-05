@@ -93,7 +93,7 @@ test("Inbox PWA exposes bulk controls and retains the single-item action outside
  assert.match(html,/value="Thinking"/);
  assert.match(html,/value="Drop"/);
  assert.match(css,/\.inbox-bulk-actions/);
- assert.match(serviceWorker,/notion-flow-shell-v4-inbox-bulk/);
+ assert.match(serviceWorker,/notion-flow-shell-v5-list-copy/);
  const app=await ready();
  assert.equal(app.el("inbox-bulk-actions").hidden,true);
  assert.equal(app.el("inbox-list").children[0].children.length,3);

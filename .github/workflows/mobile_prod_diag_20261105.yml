@@ -32,10 +32,10 @@ jobs:
           import { createHash } from "node:crypto";
           const base = "https://notion-inbox-triage.kazuhiro-mizuide.workers.dev";
           const cases = [
-            ["/mobile?tab=inbox", ["id=\"inbox-bulk-toggle\"", "id=\"bulk-toggle\""]],
-            ["/mobile/client.js", ["function applyInboxBulk()", "renderInboxBulkControls()", "state.inboxBulkMode"]],
-            ["/mobile/styles.css", [".inbox-bulk-actions"]],
-            ["/mobile/sw.js", ["notion-flow-shell-v4-inbox-bulk"]]
+            ["/mobile?tab=inbox", ["id=\"inbox-bulk-toggle\"", "id=\"bulk-toggle\"", "/mobile/client.js?v=20261105-block-fix"]],
+            ["/mobile/client.js?v=20261105-block-fix", ["function applyInboxBulk()", "renderInboxBulkControls()", "state.inboxBulkMode"]],
+            ["/mobile/styles.css?v=20261105-block-fix", [".inbox-bulk-actions"]],
+            ["/mobile/sw.js", ["notion-flow-shell-v5-list-copy"]]
           ];
           let fails = 0;
           for (const [path, markers] of cases) {
